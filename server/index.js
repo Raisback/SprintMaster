@@ -1,26 +1,27 @@
 /**
  * SprintMaster | Agile & Scrum Project Management Suite
- * Backend Entry Point & Schema Definitions
+ * Full Backend with Auth, Models, and Task Routes
  */
 
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json()); 
 
-// --- MONGOOSE MODELS ---
+// --- 1. MONGOOSE MODELS ---
 
-// 1. User Schema
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }, // Will be hashed via bcrypt
+  password: { type: String, required: true },
   role: { 
     type: String, 
     enum: ['ScrumMaster', 'Developer', 'ProductOwner'], 
@@ -29,67 +30,88 @@ const userSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-// 2. Sprint Schema
 const sprintSchema = new mongoose.Schema({
   name: { type: String, required: true },
   goal: String,
-  startDate: Date,
-  endDate: Date,
-  status: { 
-    type: String, 
-    enum: ['Planned', 'Active', 'Completed'], 
-    default: 'Planned' 
-  },
-  boardId: { type: mongoose.Schema.Types.ObjectId, ref: 'Board' }
+  status: { type: String, enum: ['Planned', 'Active', 'Completed'], default: 'Planned' }
 }, { timestamps: true });
 
-// 3. Task (User Story) Schema
 const taskSchema = new mongoose.Schema({
   title: { type: String, required: true },
-  description: String,
-  status: { 
-    type: String, 
-    enum: ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'], 
-    default: 'Backlog' 
-  },
-  priority: { 
-    type: String, 
-    enum: ['Low', 'Medium', 'High', 'Blocker'], 
-    default: 'Medium' 
-  },
+  status: { type: String, default: 'Backlog' },
   storyPoints: { type: Number, default: 0 },
-  assignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  sprintId: { type: mongoose.Schema.Types.ObjectId, ref: 'Sprint', default: null }, // Null = in Backlog
-  history: [{
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    action: String,
-    timestamp: { type: Date, default: Date.now }
-  }]
+  assignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);
 const Sprint = mongoose.model('Sprint', sprintSchema);
 const Task = mongoose.model('Task', taskSchema);
 
-// --- BASIC ROUTES ---
+// --- 2. AUTH ROUTES ---
 
-app.get('/', (req, res) => {
-  res.send('SprintMaster API is running...');
-});
-
-// Example: Get all tasks in the Backlog
-app.get('/api/tasks/backlog', async (req, res) => {
+// @route   POST /api/auth/register
+// @desc    Register a new user
+app.post('/api/auth/register', async (req, res) => {
   try {
-    const tasks = await Task.find({ status: 'Backlog' }).populate('assignee', 'username');
-    res.json(tasks);
+    const { username, email, password, role } = req.body;
+    let user = await User.findOne({ email });
+    if (user) return res.status(400).json({ msg: 'User already exists' });
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    user = new User({ username, email, password: hashedPassword, role });
+    await user.save();
+    res.status(201).json({ msg: 'User registered successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Database Connection
+// @route   POST /api/auth/login
+// @desc    Authenticate user & get token
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // 1. Check for user
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ msg: 'Invalid Credentials' });
+
+    // 2. Validate password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ msg: 'Invalid Credentials' });
+
+    // 3. Create JWT
+    const payload = {
+      user: {
+        id: user.id,
+        role: user.role
+      }
+    };
+
+    jwt.sign(
+      payload,
+      process.env.JWT_SECRET || 'sprint_secret_key', // Fallback for dev
+      { expiresIn: '1h' },
+      (err, token) => {
+        if (err) throw err;
+        res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+      }
+    );
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/', (req, res) => {
+  res.send('SprintMaster API is running...');
+});
+
+// --- 3. DATABASE CONNECTION & SERVER START ---
+
 const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/sprintmaster';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/sprintmaster';
 
 mongoose.connect(MONGO_URI)
   .then(() => {
