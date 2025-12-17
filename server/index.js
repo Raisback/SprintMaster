@@ -1,6 +1,6 @@
 /**
  * SprintMaster | Agile & Scrum Project Management Suite
- * Full Backend with Auth, Models, Task, and Sprint Routes
+ * Full Backend with Auth, Models, Task, and Sprint Logic
  */
 
 const express = require('express');
@@ -33,7 +33,7 @@ const userSchema = new mongoose.Schema({
 const sprintSchema = new mongoose.Schema({
   name: { type: String, required: true },
   goal: String,
-  startDate: Date,
+  startDate: { type: Date, default: Date.now },
   endDate: Date,
   status: { type: String, enum: ['Planned', 'Active', 'Completed'], default: 'Planned' }
 }, { timestamps: true });
@@ -77,7 +77,7 @@ const authMiddleware = (req, res, next) => {
 
 // --- 3. ROUTES ---
 
-// AUTH ROUTES
+// AUTH
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, email, password, role } = req.body;
@@ -110,7 +110,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// TASK ROUTES
+// TASKS
 app.post('/api/tasks', authMiddleware, async (req, res) => {
   try {
     const { title, description, storyPoints, priority } = req.body;
@@ -124,24 +124,40 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
 
 app.get('/api/tasks', authMiddleware, async (req, res) => {
   try {
-    const tasks = await Task.find().populate('assignee', 'username').populate('sprintId', 'name');
+    const tasks = await Task.find()
+      .populate('assignee', 'username')
+      .populate('sprintId', 'name');
     res.json(tasks);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Move Task to Sprint (Update Task)
 app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
   try {
-    const task = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const task = await Task.findByIdAndUpdate(
+      req.params.id, 
+      { $set: req.body }, 
+      { new: true, runValidators: true }
+    ).populate('sprintId', 'name');
+    if (!task) return res.status(404).json({ msg: 'Task not found' });
     res.json(task);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// SPRINT ROUTES
+app.delete('/api/tasks/:id', authMiddleware, async (req, res) => {
+  try {
+    const task = await Task.findByIdAndDelete(req.params.id);
+    if (!task) return res.status(404).json({ msg: 'Task not found' });
+    res.json({ msg: 'Task deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SPRINTS
 app.post('/api/sprints', authMiddleware, async (req, res) => {
   try {
     const { name, goal, startDate, endDate } = req.body;
@@ -157,6 +173,29 @@ app.get('/api/sprints', authMiddleware, async (req, res) => {
   try {
     const sprints = await Sprint.find();
     res.json(sprints);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// COMPLETE SPRINT logic
+app.post('/api/sprints/:id/complete', authMiddleware, async (req, res) => {
+  try {
+    // Validate ID format to avoid 500 errors
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ msg: 'Invalid Sprint ID format' });
+    }
+
+    const sprint = await Sprint.findByIdAndUpdate(req.params.id, { status: 'Completed' }, { new: true });
+    if (!sprint) return res.status(404).json({ msg: 'Sprint not found' });
+
+    // Move unfinished tasks back to Backlog
+    await Task.updateMany(
+      { sprintId: req.params.id, status: { $ne: 'Done' } },
+      { $set: { status: 'Backlog', sprintId: null } }
+    );
+
+    res.json({ msg: 'Sprint completed. Unfinished tasks moved to backlog.', sprint });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
