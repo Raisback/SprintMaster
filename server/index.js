@@ -110,11 +110,28 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// USERS (For Assignment Dropdown)
+app.get('/api/users', authMiddleware, async (req, res) => {
+  try {
+    const users = await User.find().select('username role email');
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // TASKS
 app.post('/api/tasks', authMiddleware, async (req, res) => {
   try {
-    const { title, description, storyPoints, priority } = req.body;
-    const newTask = new Task({ title, description, storyPoints, priority, assignee: req.user.id });
+    const { title, description, storyPoints, priority, assignee, sprintId } = req.body;
+    const newTask = new Task({ 
+      title, 
+      description, 
+      storyPoints, 
+      priority, 
+      assignee: assignee || null,
+      sprintId: sprintId || null
+    });
     const task = await newTask.save();
     res.json(task);
   } catch (err) {
@@ -133,13 +150,14 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
   }
 });
 
+// Unified Update Route (supports both status cycling and field updates)
 app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
   try {
     const task = await Task.findByIdAndUpdate(
       req.params.id, 
       { $set: req.body }, 
       { new: true, runValidators: true }
-    ).populate('sprintId', 'name');
+    ).populate('assignee', 'username').populate('sprintId', 'name');
     if (!task) return res.status(404).json({ msg: 'Task not found' });
     res.json(task);
   } catch (err) {
@@ -181,7 +199,6 @@ app.get('/api/sprints', authMiddleware, async (req, res) => {
 // COMPLETE SPRINT logic
 app.post('/api/sprints/:id/complete', authMiddleware, async (req, res) => {
   try {
-    // Validate ID format to avoid 500 errors
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ msg: 'Invalid Sprint ID format' });
     }

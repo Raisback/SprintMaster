@@ -13,7 +13,8 @@ import {
   Loader2,
   X,
   Clock,
-  Target
+  Target,
+  Users
 } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:5000/api';
@@ -24,6 +25,7 @@ const App = () => {
   const [view, setView] = useState('dashboard');
   const [tasks, setTasks] = useState([]);
   const [sprints, setSprints] = useState([]);
+  const [availableUsers, setAvailableUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
@@ -36,7 +38,9 @@ const App = () => {
     description: '',
     status: 'To Do',
     priority: 'Medium',
-    storyPoints: 1
+    storyPoints: 1,
+    assignee: '',
+    sprintId: ''
   });
 
   const [newSprint, setNewSprint] = useState({
@@ -54,13 +58,15 @@ const App = () => {
     setLoading(true);
     try {
       const headers = { 'x-auth-token': token };
-      const [tasksRes, sprintsRes] = await Promise.all([
+      const [tasksRes, sprintsRes, usersRes] = await Promise.all([
         fetch(`${API_BASE_URL}/tasks`, { headers }),
-        fetch(`${API_BASE_URL}/sprints`, { headers })
+        fetch(`${API_BASE_URL}/sprints`, { headers }),
+        fetch(`${API_BASE_URL}/users`, { headers })
       ]);
 
       if (tasksRes.ok) setTasks(await tasksRes.json());
       if (sprintsRes.ok) setSprints(await sprintsRes.json());
+      if (usersRes.ok) setAvailableUsers(await usersRes.json());
     } catch (err) {
       setError("Connection lost. Please check your server.");
     } finally {
@@ -73,7 +79,6 @@ const App = () => {
   }, [token, fetchData]);
 
   // --- ACTIONS ---
-
   const handleAuth = async (e) => {
     e.preventDefault();
     setError(null);
@@ -108,7 +113,7 @@ const App = () => {
       });
       if (res.ok) {
         setShowTaskModal(false);
-        setNewTask({ title: '', description: '', status: 'To Do', priority: 'Medium', storyPoints: 1 });
+        setNewTask({ title: '', description: '', status: 'To Do', priority: 'Medium', storyPoints: 1, assignee: '', sprintId: '' });
         fetchData();
       }
     } catch (err) { console.error(err); }
@@ -136,7 +141,7 @@ const App = () => {
     
     try {
       await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
-        method: 'PUT',
+        method: 'PATCH', // Switched to PATCH to match backend
         headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
         body: JSON.stringify({ status: nextStatus })
       });
@@ -144,41 +149,48 @@ const App = () => {
     } catch (err) { console.error(err); }
   };
 
+  const calculateSprintProgress = (sprintId) => {
+    const sprintTasks = tasks.filter(t => t.sprintId?._id === sprintId || t.sprintId === sprintId);
+    if (sprintTasks.length === 0) return 0;
+    const completedPoints = sprintTasks.filter(t => t.status === 'Done').reduce((acc, t) => acc + (t.storyPoints || 0), 0);
+    const totalPoints = sprintTasks.reduce((acc, t) => acc + (t.storyPoints || 0), 0);
+    return Math.round((completedPoints / totalPoints) * 100);
+  };
+
   const logout = () => { localStorage.clear(); setToken(null); setUser(null); };
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-10 border border-slate-100">
-          <div className="flex justify-center mb-8">
-            <div className="bg-indigo-600 p-4 rounded-2xl shadow-xl shadow-indigo-100 rotate-3">
-              <Trello className="text-white w-10 h-10" />
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-10 border border-slate-100">
+            <div className="flex justify-center mb-8">
+              <div className="bg-indigo-600 p-4 rounded-2xl shadow-xl shadow-indigo-100 rotate-3">
+                <Trello className="text-white w-10 h-10" />
+              </div>
             </div>
+            <h2 className="text-3xl font-black text-center text-slate-800 mb-2 tracking-tight">SprintMaster</h2>
+            <p className="text-slate-400 text-center mb-10 text-sm font-medium">Elevate your team's agility.</p>
+  
+            {error && <div className="bg-red-50 text-red-600 p-3 rounded-xl mb-6 text-xs font-bold flex items-center gap-2 border border-red-100"><AlertCircle size={16}/> {error}</div>}
+  
+            <form onSubmit={handleAuth} className="space-y-5">
+              {!isLogin && (
+                <input type="text" placeholder="Username" required className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium" value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} />
+              )}
+              <input type="email" placeholder="Email" required className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
+              <input type="password" placeholder="Password" required className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
+              <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-100 transition-all transform active:scale-95">
+                {isLogin ? 'LOG IN' : 'CREATE ACCOUNT'}
+              </button>
+            </form>
+            <button onClick={() => setIsLogin(!isLogin)} className="w-full mt-8 text-sm font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-widest">{isLogin ? "Join the team" : "Back to login"}</button>
           </div>
-          <h2 className="text-3xl font-black text-center text-slate-800 mb-2 tracking-tight">SprintMaster</h2>
-          <p className="text-slate-400 text-center mb-10 text-sm font-medium">Elevate your team's agility.</p>
-
-          {error && <div className="bg-red-50 text-red-600 p-3 rounded-xl mb-6 text-xs font-bold flex items-center gap-2 border border-red-100"><AlertCircle size={16}/> {error}</div>}
-
-          <form onSubmit={handleAuth} className="space-y-5">
-            {!isLogin && (
-              <input type="text" placeholder="Username" required className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium" value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} />
-            )}
-            <input type="email" placeholder="Email" required className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
-            <input type="password" placeholder="Password" required className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
-            <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-100 transition-all transform active:scale-95">
-              {isLogin ? 'LOG IN' : 'CREATE ACCOUNT'}
-            </button>
-          </form>
-          <button onClick={() => setIsLogin(!isLogin)} className="w-full mt-8 text-sm font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-widest">{isLogin ? "Join the team" : "Back to login"}</button>
         </div>
-      </div>
-    );
+      );
   }
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans">
-      {/* Sidebar */}
       <aside className="w-72 bg-white border-r border-slate-200 flex flex-col fixed h-full z-20">
         <div className="p-8 flex items-center gap-4">
           <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-100"><Trello size={24} /></div>
@@ -199,7 +211,7 @@ const App = () => {
 
         <div className="p-6 border-t border-slate-100">
           <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-4 mb-4">
-            <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center font-black text-indigo-600 border-2 border-white shadow-sm">{user?.username?.[0].toUpperCase()}</div>
+            <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center font-black text-indigo-600 border-2 border-white shadow-sm uppercase">{user?.username?.[0]}</div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-black text-slate-800 truncate uppercase tracking-tight">{user?.username}</p>
               <p className="text-[10px] font-bold text-indigo-500 uppercase">{user?.role}</p>
@@ -255,23 +267,33 @@ const App = () => {
                 <h3 className="text-lg font-black text-slate-800 uppercase tracking-tighter mb-8 flex items-center gap-3">
                   <Calendar className="text-indigo-600" /> Active & Planned Sprints
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {sprints.map(s => (
-                    <div key={s._id} className="p-6 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-200 transition-all group">
-                      <div className="flex justify-between items-start mb-4">
-                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${s.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-500'}`}>{s.status}</span>
-                        <ChevronRight className="text-slate-300 group-hover:text-indigo-400 transition-colors" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {sprints.map(s => {
+                    const progress = calculateSprintProgress(s._id);
+                    return (
+                      <div key={s._id} className="p-6 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-200 transition-all group">
+                        <div className="flex justify-between items-start mb-4">
+                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${s.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-500'}`}>{s.status}</span>
+                          <span className="text-xs font-black text-indigo-600">{progress}%</span>
+                        </div>
+                        <h4 className="text-lg font-black text-slate-800 mb-1">{s.name}</h4>
+                        <p className="text-xs text-slate-500 font-medium mb-4 line-clamp-1">{s.goal || 'Focus on delivery'}</p>
+                        
+                        <div className="w-full bg-slate-200 h-1.5 rounded-full mb-6 overflow-hidden">
+                          <div className="bg-indigo-600 h-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                        </div>
+
+                        <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <div className="flex gap-4">
+                            <span className="flex items-center gap-1"><Clock size={12}/> {new Date(s.startDate).toLocaleDateString()}</span>
+                            <span>-</span>
+                            <span>{new Date(s.endDate).toLocaleDateString()}</span>
+                          </div>
+                          <ChevronRight className="text-slate-300 group-hover:text-indigo-400 transition-colors" />
+                        </div>
                       </div>
-                      <h4 className="text-lg font-black text-slate-800 mb-1">{s.name}</h4>
-                      <p className="text-xs text-slate-500 font-medium mb-4">{s.goal || 'Focus on delivery'}</p>
-                      <div className="flex gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        <span className="flex items-center gap-1"><Clock size={12}/> {new Date(s.startDate).toLocaleDateString()}</span>
-                        <span>-</span>
-                        <span>{new Date(s.endDate).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  ))}
-                  {sprints.length === 0 && <div className="col-span-2 text-center py-10 text-slate-400 font-bold italic">No sprints created yet.</div>}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -308,40 +330,40 @@ const App = () => {
           )}
 
           {view === 'backlog' && (
-            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden">
-               <table className="w-full text-left">
-                  <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                     <tr>
-                        <th className="px-10 py-6">Requirement</th>
-                        <th className="px-10 py-6">Severity</th>
-                        <th className="px-10 py-6">Phase</th>
-                        <th className="px-10 py-6">Owner</th>
-                        <th className="px-10 py-6 text-right">Estimate</th>
+             <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden">
+             <table className="w-full text-left">
+                <thead className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                   <tr>
+                      <th className="px-10 py-6">Requirement</th>
+                      <th className="px-10 py-6">Severity</th>
+                      <th className="px-10 py-6">Phase</th>
+                      <th className="px-10 py-6">Owner</th>
+                      <th className="px-10 py-6 text-right">Estimate</th>
+                   </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                   {tasks.map(task => (
+                     <tr key={task._id} className="hover:bg-indigo-50/30 transition-all group">
+                       <td className="px-10 py-8">
+                         <p className="font-black text-slate-800 text-sm group-hover:text-indigo-600 mb-1">{task.title}</p>
+                         <p className="text-xs text-slate-400 font-medium line-clamp-1">{task.description}</p>
+                       </td>
+                       <td className="px-10 py-8">
+                         <span className={`text-[9px] px-3 py-1 rounded-full font-black uppercase tracking-widest ${task.priority === 'High' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500'}`}>{task.priority}</span>
+                       </td>
+                       <td className="px-10 py-8"><span className="text-xs font-black text-slate-500 uppercase">{task.status}</span></td>
+                       <td className="px-10 py-8">
+                         <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-indigo-50 rounded-full flex items-center justify-center text-xs font-black text-indigo-400 border-2 border-white shadow-sm">{task.assignee?.username?.[0].toUpperCase() || 'U'}</div>
+                            <span className="text-xs font-bold text-slate-500">{task.assignee?.username || 'None'}</span>
+                         </div>
+                       </td>
+                       <td className="px-10 py-8 text-right font-black text-slate-800 text-lg">{task.storyPoints}</td>
                      </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                     {tasks.map(task => (
-                       <tr key={task._id} className="hover:bg-indigo-50/30 transition-all group">
-                         <td className="px-10 py-8">
-                           <p className="font-black text-slate-800 text-sm group-hover:text-indigo-600 mb-1">{task.title}</p>
-                           <p className="text-xs text-slate-400 font-medium line-clamp-1">{task.description}</p>
-                         </td>
-                         <td className="px-10 py-8">
-                           <span className={`text-[9px] px-3 py-1 rounded-full font-black uppercase tracking-widest ${task.priority === 'High' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500'}`}>{task.priority}</span>
-                         </td>
-                         <td className="px-10 py-8"><span className="text-xs font-black text-slate-500 uppercase">{task.status}</span></td>
-                         <td className="px-10 py-8">
-                           <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-indigo-50 rounded-full flex items-center justify-center text-xs font-black text-indigo-400 border-2 border-white shadow-sm">{task.assignee?.username?.[0].toUpperCase() || 'U'}</div>
-                              <span className="text-xs font-bold text-slate-500">{task.assignee?.username || 'None'}</span>
-                           </div>
-                         </td>
-                         <td className="px-10 py-8 text-right font-black text-slate-800 text-lg">{task.storyPoints}</td>
-                       </tr>
-                     ))}
-                  </tbody>
-               </table>
-            </div>
+                   ))}
+                </tbody>
+             </table>
+          </div>
           )}
         </div>
 
@@ -356,19 +378,41 @@ const App = () => {
                 </div>
                 <button onClick={() => setShowTaskModal(false)} className="hover:bg-white/20 p-3 rounded-full transition-all"><X size={24} /></button>
               </div>
-              <form onSubmit={handleCreateTask} className="p-10 space-y-8">
-                <div className="space-y-2">
+              <form onSubmit={handleCreateTask} className="p-10 space-y-6">
+                <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Task Title</label>
                   <input type="text" required className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-slate-800 transition-all" value={newTask.title} onChange={e => setNewTask({...newTask, title: e.target.value})} />
                 </div>
+                
                 <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Assignee</label>
+                    <select className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" value={newTask.assignee} onChange={e => setNewTask({...newTask, assignee: e.target.value})}>
+                      <option value="">Unassigned</option>
+                      {availableUsers.map(u => (
+                        <option key={u._id} value={u._id}>{u.username}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Active Sprint</label>
+                    <select className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" value={newTask.sprintId} onChange={e => setNewTask({...newTask, sprintId: e.target.value})}>
+                      <option value="">Backlog Only</option>
+                      {sprints.filter(s => s.status !== 'Completed').map(s => (
+                        <option key={s._id} value={s._id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Priority</label>
                     <select className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" value={newTask.priority} onChange={e => setNewTask({...newTask, priority: e.target.value})}>
                       <option>Low</option><option>Medium</option><option>High</option>
                     </select>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Story Points</label>
                     <input type="number" min="1" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" value={newTask.storyPoints} onChange={e => setNewTask({...newTask, storyPoints: parseInt(e.target.value)})} />
                   </div>
