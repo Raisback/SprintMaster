@@ -1,6 +1,7 @@
 /**
  * SprintMaster | Agile & Scrum Project Management Suite
  * FULL VERSION: Consolidated Auth, Tasks (with Delete), and Sprints
+ * UPDATE: Added RBAC Middleware for protected actions
  */
 
 const express = require('express');
@@ -56,17 +57,34 @@ const User = mongoose.model('User', userSchema);
 const Sprint = mongoose.model('Sprint', sprintSchema);
 const Task = mongoose.model('Task', taskSchema);
 
-// --- 2. AUTH MIDDLEWARE ---
-const authMiddleware = (req, res, next) => {
+// --- 2. AUTH & RBAC MIDDLEWARE ---
+const authMiddleware = async (req, res, next) => {
   const token = req.header('x-auth-token');
   if (!token) return res.status(401).json({ msg: 'No token, authorization denied' });
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
     req.user = decoded.user;
+    
+    // Fetch full user to attach role to request
+    const fullUser = await User.findById(req.user.id).select('role');
+    if (fullUser) {
+      req.user.role = fullUser.role;
+    }
+    
     next();
   } catch (err) {
     res.status(401).json({ msg: 'Token is not valid' });
   }
+};
+
+// RBAC Middleware: Restrict access to specific roles
+const checkRole = (roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ msg: 'Access denied: Insufficient permissions' });
+    }
+    next();
+  };
 };
 
 // --- 3. ROUTES ---
@@ -74,10 +92,15 @@ const authMiddleware = (req, res, next) => {
 // AUTH: Register
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, role } = req.body;
     let user = await User.findOne({ email });
     if (user) return res.status(400).json({ msg: 'User already exists' });
-    user = new User({ username, email, password: bcrypt.hashSync(password, 10) });
+    user = new User({ 
+      username, 
+      email, 
+      password: bcrypt.hashSync(password, 10),
+      role: role || 'Developer' 
+    });
     await user.save();
     res.json({ msg: 'Registered successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -115,7 +138,6 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
 app.post('/api/tasks', authMiddleware, async (req, res) => {
   try {
     const taskData = { ...req.body };
-    // If assigned to a sprint, ensure it's at least in "To Do"
     if (taskData.sprintId && taskData.status === 'Backlog') {
         taskData.status = 'To Do';
     }
@@ -129,7 +151,6 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
 app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
   try {
     const updateData = req.body;
-    // Auto-move to 'To Do' if assigned to a sprint while in Backlog
     if (updateData.sprintId && (!updateData.status || updateData.status === 'Backlog')) {
       updateData.status = 'To Do';
     }
@@ -145,8 +166,8 @@ app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// TASKS: Delete
-app.delete('/api/tasks/:id', authMiddleware, async (req, res) => {
+// TASKS: Delete (RBAC: ScrumMaster or ProductOwner)
+app.delete('/api/tasks/:id', authMiddleware, checkRole(['ScrumMaster', 'ProductOwner']), async (req, res) => {
   try {
     const task = await Task.findByIdAndDelete(req.params.id);
     if (!task) return res.status(404).json({ msg: 'Task not found' });
@@ -156,8 +177,8 @@ app.delete('/api/tasks/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// SPRINTS: Create
-app.post('/api/sprints', authMiddleware, async (req, res) => {
+// SPRINTS: Create (RBAC: ScrumMaster or ProductOwner)
+app.post('/api/sprints', authMiddleware, checkRole(['ScrumMaster', 'ProductOwner']), async (req, res) => {
   try {
     const { name, goal, startDate, endDate } = req.body;
     const newSprint = new Sprint({ name, goal, startDate, endDate });
@@ -178,10 +199,9 @@ app.get('/api/sprints', authMiddleware, async (req, res) => {
   }
 });
 
-// SPRINTS: Delete (Cleanup tasks associated)
-app.delete('/api/sprints/:id', authMiddleware, async (req, res) => {
+// SPRINTS: Delete (RBAC: ScrumMaster only)
+app.delete('/api/sprints/:id', authMiddleware, checkRole(['ScrumMaster']), async (req, res) => {
   try {
-    // Return all tasks in this sprint back to Backlog
     await Task.updateMany(
       { sprintId: req.params.id },
       { $set: { sprintId: null, status: 'Backlog' } }
