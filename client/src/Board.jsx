@@ -1,13 +1,31 @@
 import React from 'react';
 import { Trash2 } from 'lucide-react';
 
-const Board = ({ tasks, updateTaskStatus, deleteTask, canDeleteTasks }) => {
+const Board = ({ tasks, updateTaskStatus, moveTaskToStatus, deleteTask, canDeleteTasks }) => {
   const statuses = ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'];
+
+  const onDragStart = (e, taskId) => {
+    e.dataTransfer.setData("taskId", taskId);
+  };
+
+  const onDragOver = (e) => {
+    e.preventDefault(); // Necessary to allow a drop
+  };
+
+  const onDrop = (e, targetStatus) => {
+    const taskId = e.dataTransfer.getData("taskId");
+    moveTaskToStatus(taskId, targetStatus);
+  };
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
       {statuses.map(status => (
-        <div key={status} className="space-y-6">
+        <div 
+          key={status} 
+          className="space-y-6"
+          onDragOver={onDragOver}
+          onDrop={(e) => onDrop(e, status)}
+        >
           <div className="flex items-center justify-between px-2">
             <h3 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${
@@ -27,9 +45,11 @@ const Board = ({ tasks, updateTaskStatus, deleteTask, canDeleteTasks }) => {
             {tasks.filter(t => t.status === status).map(task => (
               <div 
                 key={task._id}
+                draggable
+                onDragStart={(e) => onDragStart(e, task._id)}
                 onClick={() => updateTaskStatus(task._id, task.status, 1)}
                 onContextMenu={(e) => { e.preventDefault(); updateTaskStatus(task._id, task.status, -1); }}
-                className="group bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer relative"
+                className="group bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer relative active:cursor-grabbing"
               >
                 {canDeleteTasks && (
                   <button 

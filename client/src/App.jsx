@@ -105,20 +105,26 @@ const App = () => {
     } catch (err) { setError('Failed to create task'); }
   };
 
+  // Original function for clicking through statuses
   const updateTaskStatus = async (taskId, currentStatus, direction = 1) => {
     const statuses = ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'];
     let currentIndex = statuses.indexOf(currentStatus);
     let nextIndex = currentIndex + direction;
     if (nextIndex >= 0 && nextIndex < statuses.length) {
-      try {
-        await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-          body: JSON.stringify({ status: statuses[nextIndex] })
-        });
-        fetchData();
-      } catch (err) { setError('Update failed'); }
+      moveTaskToStatus(taskId, statuses[nextIndex]);
     }
+  };
+
+  // New specific move function used by both drag-and-drop and the original click-through
+  const moveTaskToStatus = async (taskId, newStatus) => {
+    try {
+      await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+        body: JSON.stringify({ status: newStatus })
+      });
+      fetchData();
+    } catch (err) { setError('Update failed'); }
   };
 
   const deleteTask = async (taskId) => {
@@ -210,7 +216,15 @@ const App = () => {
         ) : (
           <>
             {view === 'dashboard' && <Dashboard tasks={tasks} sprints={sprints} availableUsers={availableUsers} calculateSprintProgress={calculateSprintProgress} canDeleteSprints={canDeleteSprints} deleteSprint={deleteSprint} />}
-            {view === 'board' && <Board tasks={tasks} updateTaskStatus={updateTaskStatus} deleteTask={deleteTask} canDeleteTasks={canDeleteTasks} />}
+            {view === 'board' && (
+              <Board 
+                tasks={tasks} 
+                updateTaskStatus={updateTaskStatus} 
+                moveTaskToStatus={moveTaskToStatus}
+                deleteTask={deleteTask} 
+                canDeleteTasks={canDeleteTasks} 
+              />
+            )}
             {view === 'backlog' && <Backlog tasks={tasks} deleteTask={deleteTask} canDeleteTasks={canDeleteTasks} />}
           </>
         )}
