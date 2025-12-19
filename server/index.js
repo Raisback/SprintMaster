@@ -1,6 +1,6 @@
 /**
  * SprintMaster | Agile & Scrum Project Management Suite
- * FULL VERSION: Restored all original routes + Task & Sprint Delete Fixes
+ * FULL VERSION: Consolidated Auth, Tasks (with Delete), and Sprints
  */
 
 const express = require('express');
@@ -46,14 +46,10 @@ const taskSchema = new mongoose.Schema({
     enum: ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'], 
     default: 'Backlog' 
   },
-  priority: { 
-    type: String, 
-    enum: ['Low', 'Medium', 'High', 'Blocker'], 
-    default: 'Medium' 
-  },
+  priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
   storyPoints: { type: Number, default: 1 },
   assignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  sprintId: { type: mongoose.Schema.Types.ObjectId, ref: 'Sprint', default: null }
+  sprintId: { type: mongoose.Schema.Types.ObjectId, ref: 'Sprint' }
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);
@@ -61,13 +57,11 @@ const Sprint = mongoose.model('Sprint', sprintSchema);
 const Task = mongoose.model('Task', taskSchema);
 
 // --- 2. AUTH MIDDLEWARE ---
-
 const authMiddleware = (req, res, next) => {
   const token = req.header('x-auth-token');
   if (!token) return res.status(401).json({ msg: 'No token, authorization denied' });
-
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'sprint_secret_key');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
     req.user = decoded.user;
     next();
   } catch (err) {
@@ -77,103 +71,65 @@ const authMiddleware = (req, res, next) => {
 
 // --- 3. ROUTES ---
 
-// AUTH: REGISTER
+// AUTH: Register
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { username, email, password, role } = req.body;
+    const { username, email, password } = req.body;
     let user = await User.findOne({ email });
     if (user) return res.status(400).json({ msg: 'User already exists' });
-    
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-    
-    user = new User({ username, email, password: hashedPassword, role });
+    user = new User({ username, email, password: bcrypt.hashSync(password, 10) });
     await user.save();
-    
-    res.status(201).json({ msg: 'User registered successfully' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    res.json({ msg: 'Registered successfully' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// AUTH: LOGIN
+// AUTH: Login
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ msg: 'Invalid Credentials' });
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ msg: 'Invalid Credentials' });
-
-    const payload = { user: { id: user.id, role: user.role } };
-    jwt.sign(
-      payload, 
-      process.env.JWT_SECRET || 'sprint_secret_key', 
-      { expiresIn: '1h' }, 
-      (err, token) => {
-        if (err) throw err;
-        res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
-      }
-    );
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    if (!user || !bcrypt.compareSync(password, user.password)) 
+      return res.status(400).json({ msg: 'Invalid credentials' });
+    const token = jwt.sign({ user: { id: user.id } }, process.env.JWT_SECRET || 'secret', { expiresIn: '10h' });
+    res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// USERS: LIST
+// USERS: Get All
 app.get('/api/users', authMiddleware, async (req, res) => {
   try {
-    const users = await User.find().select('username role');
+    const users = await User.find().select('-password');
     res.json(users);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// TASKS: CREATE
-app.post('/api/tasks', authMiddleware, async (req, res) => {
-  try {
-    const { title, description, storyPoints, priority, assignee, sprintId } = req.body;
-    // Auto-status: if it's in a sprint, it must be 'To Do' to show on board
-    const status = sprintId ? 'To Do' : 'Backlog';
-
-    const newTask = new Task({ 
-      title, 
-      description, 
-      storyPoints, 
-      priority, 
-      status,
-      assignee: assignee || null,
-      sprintId: sprintId || null
-    });
-    const task = await newTask.save();
-    const populatedTask = await Task.findById(task._id)
-      .populate('assignee', 'username')
-      .populate('sprintId', 'name');
-    res.json(populatedTask);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// TASKS: GET ALL
+// TASKS: Get All
 app.get('/api/tasks', authMiddleware, async (req, res) => {
   try {
-    const tasks = await Task.find()
-      .populate('assignee', 'username')
-      .populate('sprintId', 'name');
+    const tasks = await Task.find().populate('assignee', 'username').populate('sprintId', 'name');
     res.json(tasks);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// TASKS: UPDATE
+// TASKS: Create
+app.post('/api/tasks', authMiddleware, async (req, res) => {
+  try {
+    const taskData = { ...req.body };
+    // If assigned to a sprint, ensure it's at least in "To Do"
+    if (taskData.sprintId && taskData.status === 'Backlog') {
+        taskData.status = 'To Do';
+    }
+    const newTask = new Task(taskData);
+    const task = await newTask.save();
+    res.json(task);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// TASKS: Update
 app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
   try {
-    const updateData = { ...req.body };
-    // Logic: If a sprint is added to a backlog task, auto-move it to 'To Do'
+    const updateData = req.body;
+    // Auto-move to 'To Do' if assigned to a sprint while in Backlog
     if (updateData.sprintId && (!updateData.status || updateData.status === 'Backlog')) {
       updateData.status = 'To Do';
     }
@@ -189,18 +145,18 @@ app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// TASKS: DELETE
+// TASKS: Delete
 app.delete('/api/tasks/:id', authMiddleware, async (req, res) => {
   try {
     const task = await Task.findByIdAndDelete(req.params.id);
     if (!task) return res.status(404).json({ msg: 'Task not found' });
-    res.json({ msg: 'Task deleted successfully' });
+    res.json({ msg: 'Task removed successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// SPRINTS: CREATE
+// SPRINTS: Create
 app.post('/api/sprints', authMiddleware, async (req, res) => {
   try {
     const { name, goal, startDate, endDate } = req.body;
@@ -212,7 +168,7 @@ app.post('/api/sprints', authMiddleware, async (req, res) => {
   }
 });
 
-// SPRINTS: GET ALL
+// SPRINTS: Get All
 app.get('/api/sprints', authMiddleware, async (req, res) => {
   try {
     const sprints = await Sprint.find();
@@ -222,15 +178,14 @@ app.get('/api/sprints', authMiddleware, async (req, res) => {
   }
 });
 
-// SPRINTS: DELETE
+// SPRINTS: Delete (Cleanup tasks associated)
 app.delete('/api/sprints/:id', authMiddleware, async (req, res) => {
   try {
-    // 1. Move all tasks in this sprint back to Backlog so they aren't lost
+    // Return all tasks in this sprint back to Backlog
     await Task.updateMany(
       { sprintId: req.params.id },
       { $set: { sprintId: null, status: 'Backlog' } }
     );
-    // 2. Delete the sprint
     const sprint = await Sprint.findByIdAndDelete(req.params.id);
     if (!sprint) return res.status(404).json({ msg: 'Sprint not found' });
     res.json({ msg: 'Sprint deleted and tasks returned to backlog' });
@@ -241,11 +196,11 @@ app.delete('/api/sprints/:id', authMiddleware, async (req, res) => {
 
 // --- 4. DATABASE CONNECTION ---
 const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/sprintmaster';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/sprintmaster';
 
 mongoose.connect(MONGO_URI)
   .then(() => {
-    console.log('✅ Connected to MongoDB');
-    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+    console.log('MongoDB Connected');
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
-  .catch(err => console.error('❌ MongoDB connection error:', err));
+  .catch(err => console.log(err));

@@ -14,7 +14,8 @@ import {
   X,
   Clock,
   Target,
-  Users
+  Users,
+  Trash2
 } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:5000/api';
@@ -119,6 +120,21 @@ const App = () => {
     } catch (err) { console.error(err); }
   };
 
+  const handleDeleteTask = async (taskId, e) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this task?")) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: { 'x-auth-token': token }
+      });
+      if (res.ok) {
+        fetchData();
+      }
+    } catch (err) { console.error(err); }
+  };
+
   const handleCreateSprint = async (e) => {
     e.preventDefault();
     try {
@@ -135,7 +151,21 @@ const App = () => {
     } catch (err) { console.error(err); }
   };
 
-  // Improved to handle bidirectional movement
+  const handleDeleteSprint = async (sprintId, e) => {
+    e.stopPropagation();
+    if (!window.confirm("Deleting this sprint will move all its tasks back to the Backlog. Proceed?")) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/sprints/${sprintId}`, {
+        method: 'DELETE',
+        headers: { 'x-auth-token': token }
+      });
+      if (res.ok) {
+        fetchData();
+      }
+    } catch (err) { console.error(err); }
+  };
+
   const updateTaskStatus = async (taskId, currentStatus, direction = 'forward') => {
     const statuses = ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'];
     let nextIndex;
@@ -280,10 +310,18 @@ const App = () => {
                   {sprints.map(s => {
                     const progress = calculateSprintProgress(s._id);
                     return (
-                      <div key={s._id} className="p-6 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-200 transition-all group">
+                      <div key={s._id} className="p-6 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-200 transition-all group relative">
                         <div className="flex justify-between items-start mb-4">
                           <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${s.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-500'}`}>{s.status}</span>
-                          <span className="text-xs font-black text-indigo-600">{progress}%</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-indigo-600">{progress}%</span>
+                            <button 
+                              onClick={(e) => handleDeleteSprint(s._id, e)}
+                              className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                         <h4 className="text-lg font-black text-slate-800 mb-1">{s.name}</h4>
                         <p className="text-xs text-slate-500 font-medium mb-4 line-clamp-1">{s.goal || 'Focus on delivery'}</p>
@@ -329,7 +367,12 @@ const App = () => {
                       >
                         <div className="flex justify-between items-start mb-4">
                           <span className={`text-[9px] px-2.5 py-1 rounded-lg font-black uppercase ${task.priority === 'High' ? 'bg-red-50 text-red-500' : 'bg-indigo-50 text-indigo-500'}`}>{task.priority}</span>
-                          <span className="text-[10px] font-black text-slate-300">{task.storyPoints} PTS</span>
+                          <button 
+                            onClick={(e) => handleDeleteTask(task._id, e)}
+                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                         <h4 className="font-bold text-slate-800 text-sm mb-6 group-hover:text-indigo-600 transition-colors leading-relaxed">{task.title}</h4>
                         <div className="flex items-center justify-between pt-4 border-t border-slate-50">
@@ -337,8 +380,8 @@ const App = () => {
                              <div className="w-6 h-6 bg-slate-50 rounded-full flex items-center justify-center text-[9px] font-black text-slate-400 border border-slate-100 uppercase">{task.assignee?.username?.[0] || 'U'}</div>
                              <span className="text-[10px] font-bold text-slate-400">{task.assignee?.username || 'Unassigned'}</span>
                           </div>
+                          <span className="text-[10px] font-black text-slate-300">{task.storyPoints} PTS</span>
                         </div>
-                        {/* Tooltip hint */}
                         <div className="absolute bottom-1 right-3 text-[7px] text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity font-bold uppercase">L: Next | R: Back</div>
                       </div>
                     ))}
@@ -357,7 +400,7 @@ const App = () => {
                       <th className="px-10 py-6">Severity</th>
                       <th className="px-10 py-6">Phase</th>
                       <th className="px-10 py-6">Owner</th>
-                      <th className="px-10 py-6 text-right">Estimate</th>
+                      <th className="px-10 py-6 text-right">Actions</th>
                    </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -377,7 +420,17 @@ const App = () => {
                             <span className="text-xs font-bold text-slate-500">{task.assignee?.username || 'None'}</span>
                          </div>
                        </td>
-                       <td className="px-10 py-8 text-right font-black text-slate-800 text-lg">{task.storyPoints}</td>
+                       <td className="px-10 py-8 text-right">
+                         <div className="flex items-center justify-end gap-4">
+                            <span className="font-black text-slate-800 text-lg">{task.storyPoints}</span>
+                            <button 
+                                onClick={(e) => handleDeleteTask(task._id, e)}
+                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                            >
+                                <Trash2 size={18} />
+                            </button>
+                         </div>
+                       </td>
                      </tr>
                    ))}
                 </tbody>
