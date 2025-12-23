@@ -1,7 +1,7 @@
 /**
  * SprintMaster | Agile & Scrum Project Management Suite
  * FULL VERSION: Consolidated Auth, Tasks (with Delete), and Sprints
- * UPDATE: Added RBAC Middleware for protected actions
+ * UPDATE: Added subtasks to Schema and PUT route for DoD support
  */
 
 const express = require('express');
@@ -50,7 +50,12 @@ const taskSchema = new mongoose.Schema({
   priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
   storyPoints: { type: Number, default: 1 },
   assignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  sprintId: { type: mongoose.Schema.Types.ObjectId, ref: 'Sprint' }
+  sprintId: { type: mongoose.Schema.Types.ObjectId, ref: 'Sprint' },
+  // FIX: Added subtasks array to store Definition of Done steps
+  subtasks: [{
+    text: String,
+    completed: { type: Boolean, default: false }
+  }]
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);
@@ -65,7 +70,6 @@ const authMiddleware = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
     req.user = decoded.user;
     
-    // Fetch full user to attach role to request
     const fullUser = await User.findById(req.user.id).select('role');
     if (fullUser) {
       req.user.role = fullUser.role;
@@ -77,7 +81,6 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
-// RBAC Middleware: Restrict access to specific roles
 const checkRole = (roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
@@ -89,7 +92,6 @@ const checkRole = (roles) => {
 
 // --- 3. ROUTES ---
 
-// AUTH: Register
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, email, password, role } = req.body;
@@ -106,7 +108,6 @@ app.post('/api/auth/register', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// AUTH: Login
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -118,7 +119,6 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// USERS: Get All
 app.get('/api/users', authMiddleware, async (req, res) => {
   try {
     const users = await User.find().select('-password');
@@ -126,7 +126,6 @@ app.get('/api/users', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// TASKS: Get All
 app.get('/api/tasks', authMiddleware, async (req, res) => {
   try {
     const tasks = await Task.find().populate('assignee', 'username').populate('sprintId', 'name');
@@ -134,7 +133,6 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// TASKS: Create
 app.post('/api/tasks', authMiddleware, async (req, res) => {
   try {
     const taskData = { ...req.body };
@@ -147,8 +145,8 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// TASKS: Update
-app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
+// FIX: Changed from .patch to .put to align with frontend App.jsx handleSaveTask
+app.put('/api/tasks/:id', authMiddleware, async (req, res) => {
   try {
     const updateData = req.body;
     if (updateData.sprintId && (!updateData.status || updateData.status === 'Backlog')) {
@@ -160,13 +158,14 @@ app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
       { $set: updateData }, 
       { new: true }
     ).populate('assignee', 'username').populate('sprintId', 'name');
+    
+    if (!task) return res.status(404).json({ msg: 'Task not found' });
     res.json(task);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// TASKS: Delete (RBAC: ScrumMaster or ProductOwner)
 app.delete('/api/tasks/:id', authMiddleware, checkRole(['ScrumMaster', 'ProductOwner']), async (req, res) => {
   try {
     const task = await Task.findByIdAndDelete(req.params.id);
@@ -177,7 +176,6 @@ app.delete('/api/tasks/:id', authMiddleware, checkRole(['ScrumMaster', 'ProductO
   }
 });
 
-// SPRINTS: Create (RBAC: ScrumMaster or ProductOwner)
 app.post('/api/sprints', authMiddleware, checkRole(['ScrumMaster', 'ProductOwner']), async (req, res) => {
   try {
     const { name, goal, startDate, endDate } = req.body;
@@ -189,7 +187,6 @@ app.post('/api/sprints', authMiddleware, checkRole(['ScrumMaster', 'ProductOwner
   }
 });
 
-// SPRINTS: Get All
 app.get('/api/sprints', authMiddleware, async (req, res) => {
   try {
     const sprints = await Sprint.find();
@@ -199,7 +196,6 @@ app.get('/api/sprints', authMiddleware, async (req, res) => {
   }
 });
 
-// SPRINTS: Delete (RBAC: ScrumMaster only)
 app.delete('/api/sprints/:id', authMiddleware, checkRole(['ScrumMaster']), async (req, res) => {
   try {
     await Task.updateMany(
@@ -220,7 +216,7 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/sprintmast
 
 mongoose.connect(MONGO_URI)
   .then(() => {
-    console.log('MongoDB Connected');
+    console.log('MongoDB Connected with subtask support');
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
   .catch(err => console.log(err));

@@ -91,7 +91,8 @@ const App = () => {
       storyPoints: task.storyPoints,
       assignee: task.assignee?._id || task.assignee || '',
       sprintId: task.sprintId?._id || task.sprintId || '',
-      subtasks: task.subtasks || []
+      // Ensure subtasks are cloned to break reference and trigger re-renders in Modal
+      subtasks: task.subtasks ? [...task.subtasks] : [] 
     });
     setShowTaskModal(true);
   };
@@ -262,7 +263,14 @@ const App = () => {
                 canDeleteTasks={canDeleteTasks} openEditModal={openEditModal}
               />
             )}
-            {view === 'backlog' && <Backlog tasks={tasks} deleteTask={deleteTask} canDeleteTasks={canDeleteTasks} openEditModal={openEditModal} />}
+            {view === 'backlog' && (
+              <Backlog 
+                tasks={tasks} 
+                deleteTask={deleteTask} 
+                canDeleteTasks={canDeleteTasks} 
+                openEditModal={openEditModal} // Added this prop to enable editing from backlog
+              />
+            )}
           </>
         )}
 
