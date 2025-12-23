@@ -28,7 +28,10 @@ const App = () => {
   const canDeleteSprints = user?.role === 'ScrumMaster';
   const canDeleteTasks = user?.role === 'ScrumMaster' || user?.role === 'ProductOwner';
 
-  const [newTask, setNewTask] = useState({ title: '', description: '', status: 'To Do', priority: 'Medium', storyPoints: 1, assignee: '', sprintId: '' });
+  const [newTask, setNewTask] = useState({ 
+    title: '', description: '', status: 'To Do', priority: 'Medium', 
+    storyPoints: 1, assignee: '', sprintId: '', subtasks: [] 
+  });
   const [newSprint, setNewSprint] = useState({ name: '', goal: '', startDate: '', endDate: '' });
   const [authForm, setAuthForm] = useState({ username: '', email: '', password: '', role: 'Developer' });
   const [isRegistering, setIsRegistering] = useState(false);
@@ -51,10 +54,8 @@ const App = () => {
       setSprints(Array.isArray(sprintsData) ? sprintsData : []);
       setAvailableUsers(Array.isArray(usersData) ? usersData : []);
 
-      // Analytics: Auto-select active sprint for the Board
       const active = sprintsData.find(s => s.status === 'active');
       if (active && selectedSprintId === 'all') setSelectedSprintId(active._id);
-
     } catch (err) { setError('Failed to load data'); } finally { setLoading(false); }
   }, [token, selectedSprintId]);
 
@@ -74,7 +75,7 @@ const App = () => {
       if (res.ok) {
         setShowTaskModal(false);
         setEditingTask(null);
-        setNewTask({ title: '', description: '', status: 'To Do', priority: 'Medium', storyPoints: 1, assignee: '', sprintId: '' });
+        setNewTask({ title: '', description: '', status: 'To Do', priority: 'Medium', storyPoints: 1, assignee: '', sprintId: '', subtasks: [] });
         fetchData();
       }
     } catch (err) { setError('Failed to save task'); }
@@ -89,7 +90,8 @@ const App = () => {
       priority: task.priority,
       storyPoints: task.storyPoints,
       assignee: task.assignee?._id || task.assignee || '',
-      sprintId: task.sprintId?._id || task.sprintId || ''
+      sprintId: task.sprintId?._id || task.sprintId || '',
+      subtasks: task.subtasks || []
     });
     setShowTaskModal(true);
   };
@@ -216,7 +218,7 @@ const App = () => {
             <h1 className="text-4xl font-black text-slate-800 tracking-tighter capitalize">
               {view === 'dashboard' ? 'Overview' : view + ' Space'}
             </h1>
-            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">Team Role: {user?.role}</p>
+            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">Agile Workspace</p>
           </div>
           <div className="flex gap-4">
             {view === 'board' && (
@@ -224,7 +226,7 @@ const App = () => {
                  <Filter size={16} className="text-slate-400" />
                  <select value={selectedSprintId} onChange={(e) => setSelectedSprintId(e.target.value)} className="bg-transparent font-black text-[10px] uppercase tracking-widest text-slate-600 outline-none cursor-pointer">
                    <option value="all">All Sprints</option>
-                   {sprints.map(s => (<option key={s._id} value={s._id}>{s.name} ({s.status || 'Planned'})</option>))}
+                   {sprints.map(s => (<option key={s._id} value={s._id}>{s.name}</option>))}
                  </select>
                </div>
             )}
@@ -247,23 +249,17 @@ const App = () => {
           <>
             {view === 'dashboard' && (
               <Dashboard 
-                tasks={tasks} 
-                sprints={sprints} 
-                availableUsers={availableUsers} 
+                tasks={tasks} sprints={sprints} availableUsers={availableUsers} 
                 calculateSprintProgress={calculateSprintProgress} 
-                canDeleteSprints={canDeleteSprints} 
-                deleteSprint={deleteSprint} 
+                canDeleteSprints={canDeleteSprints} deleteSprint={deleteSprint} 
                 updateSprintStatus={updateSprintStatus}
               />
             )}
             {view === 'board' && (
               <Board 
-                tasks={tasks} 
-                selectedSprintId={selectedSprintId}
-                moveTaskToStatus={moveTaskToStatus}
-                deleteTask={deleteTask} 
-                canDeleteTasks={canDeleteTasks} 
-                openEditModal={openEditModal}
+                tasks={tasks} selectedSprintId={selectedSprintId}
+                moveTaskToStatus={moveTaskToStatus} deleteTask={deleteTask} 
+                canDeleteTasks={canDeleteTasks} openEditModal={openEditModal}
               />
             )}
             {view === 'backlog' && <Backlog tasks={tasks} deleteTask={deleteTask} canDeleteTasks={canDeleteTasks} openEditModal={openEditModal} />}
@@ -272,13 +268,9 @@ const App = () => {
 
         {showTaskModal && (
           <TaskModal 
-            setShowTaskModal={setShowTaskModal} 
-            newTask={newTask} 
-            setNewTask={setNewTask} 
-            availableUsers={availableUsers} 
-            sprints={sprints} 
-            handleSave={handleSaveTask} 
-            isEditing={!!editingTask}
+            setShowTaskModal={setShowTaskModal} newTask={newTask} 
+            setNewTask={setNewTask} availableUsers={availableUsers} 
+            sprints={sprints} handleSave={handleSaveTask} isEditing={!!editingTask}
           />
         )}
         {showSprintModal && <SprintModal setShowSprintModal={setShowSprintModal} newSprint={newSprint} setNewSprint={setNewSprint} createSprint={createSprint} />}
