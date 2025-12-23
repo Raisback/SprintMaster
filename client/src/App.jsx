@@ -15,14 +15,16 @@ const App = () => {
   const [view, setView] = useState('dashboard');
   const [tasks, setTasks] = useState([]);
   const [sprints, setSprints] = useState([]);
-  const [selectedSprintId, setSelectedSprintId] = useState('all'); // Track active filter
+  const [selectedSprintId, setSelectedSprintId] = useState('all');
   const [availableUsers, setAvailableUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showSprintModal, setShowSprintModal] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
 
+  // Permission Logic
   const canManageSprints = user?.role === 'ScrumMaster' || user?.role === 'ProductOwner';
   const canDeleteSprints = user?.role === 'ScrumMaster';
   const canDeleteTasks = user?.role === 'ScrumMaster' || user?.role === 'ProductOwner';
@@ -45,14 +47,133 @@ const App = () => {
       const tasksData = await tasksRes.json();
       const sprintsData = await sprintsRes.json();
       const usersData = await usersRes.json();
+      
       setTasks(Array.isArray(tasksData) ? tasksData : []);
       setSprints(Array.isArray(sprintsData) ? sprintsData : []);
       setAvailableUsers(Array.isArray(usersData) ? usersData : []);
-    } catch (err) { setError('Failed to load data'); } finally { setLoading(false); }
-  }, [token]);
+
+      // Auto-select active sprint if it exists and we haven't manually selected one
+      if (selectedSprintId === 'all') {
+        const active = sprintsData.find(s => s.status === 'active');
+        if (active) setSelectedSprintId(active._id);
+      }
+    } catch (err) { 
+      setError('Failed to load data'); 
+    } finally { 
+      setLoading(false); 
+    }
+  }, [token, selectedSprintId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // --- Task Operations ---
+  const openEditModal = (task) => {
+    setEditingTask(task);
+    setNewTask({
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      storyPoints: task.storyPoints,
+      assignee: task.assignee?._id || task.assignee || '',
+      sprintId: task.sprintId?._id || task.sprintId || ''
+    });
+    setShowTaskModal(true);
+  };
+
+  const handleSaveTask = async (e) => {
+    e.preventDefault();
+    const method = editingTask ? 'PUT' : 'POST';
+    const url = editingTask ? `${API_BASE_URL}/tasks/${editingTask._id}` : `${API_BASE_URL}/tasks`;
+    
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+        body: JSON.stringify(newTask)
+      });
+      if (res.ok) {
+        setShowTaskModal(false);
+        setEditingTask(null);
+        fetchData();
+        setNewTask({ title: '', description: '', status: 'To Do', priority: 'Medium', storyPoints: 1, assignee: '', sprintId: '' });
+      }
+    } catch (err) { setError('Failed to save task'); }
+  };
+
+  const moveTaskToStatus = async (taskId, newStatus) => {
+    try {
+      await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+        body: JSON.stringify({ status: newStatus })
+      });
+      fetchData();
+    } catch (err) { setError('Update failed'); }
+  };
+
+  const deleteTask = async (taskId) => {
+    if (!canDeleteTasks) return;
+    if (!window.confirm('Delete this task?')) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: { 'x-auth-token': token }
+      });
+      if (res.ok) fetchData();
+    } catch (err) { setError('Delete failed'); }
+  };
+
+  // --- Sprint Operations ---
+  const createSprint = async (e) => {
+    e.preventDefault();
+    if (!canManageSprints) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/sprints`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+        body: JSON.stringify(newSprint)
+      });
+      if (res.ok) { 
+        setShowSprintModal(false); 
+        setNewSprint({ name: '', goal: '', startDate: '', endDate: '' });
+        fetchData(); 
+      }
+    } catch (err) { setError('Sprint creation failed'); }
+  };
+
+  const updateSprintStatus = async (sprintId, status) => {
+    try {
+      await fetch(`${API_BASE_URL}/sprints/${sprintId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+        body: JSON.stringify({ status })
+      });
+      fetchData();
+    } catch (err) { setError('Failed to update cycle'); }
+  };
+
+  const deleteSprint = async (id) => {
+    if (!canDeleteSprints) return;
+    if (!window.confirm('Are you sure? This will remove the sprint but keep tasks in backlog.')) return;
+    try {
+      await fetch(`${API_BASE_URL}/sprints/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-auth-token': token }
+      });
+      fetchData();
+    } catch (err) { setError('Sprint delete failed'); }
+  };
+
+  const calculateSprintProgress = (sprintId) => {
+    const sprintTasks = tasks.filter(t => (t.sprintId?._id || t.sprintId) === sprintId);
+    if (sprintTasks.length === 0) return 0;
+    const completed = sprintTasks.filter(t => t.status === 'Done').reduce((acc, t) => acc + t.storyPoints, 0);
+    const total = sprintTasks.reduce((acc, t) => acc + t.storyPoints, 0);
+    return Math.round((completed / total) * 100);
+  };
+
+  // Auth Handlers
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -90,98 +211,8 @@ const App = () => {
     setUser(null);
   };
 
-  const createTask = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await fetch(`${API_BASE_URL}/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-        body: JSON.stringify(newTask)
-      });
-      if (res.ok) {
-        setShowTaskModal(false);
-        fetchData();
-        setNewTask({ title: '', description: '', status: 'To Do', priority: 'Medium', storyPoints: 1, assignee: '', sprintId: '' });
-      }
-    } catch (err) { setError('Failed to create task'); }
-  };
-
-  const updateTaskStatus = async (taskId, currentStatus, direction = 1) => {
-    const statuses = ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'];
-    let currentIndex = statuses.indexOf(currentStatus);
-    let nextIndex = currentIndex + direction;
-    if (nextIndex >= 0 && nextIndex < statuses.length) {
-      moveTaskToStatus(taskId, statuses[nextIndex]);
-    }
-  };
-
-  const moveTaskToStatus = async (taskId, newStatus) => {
-    try {
-      await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-        body: JSON.stringify({ status: newStatus })
-      });
-      fetchData();
-    } catch (err) { setError('Update failed'); }
-  };
-
-  const deleteTask = async (taskId) => {
-    if (!canDeleteTasks) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
-        method: 'DELETE',
-        headers: { 'x-auth-token': token }
-      });
-      if (res.ok) fetchData();
-    } catch (err) { setError('Delete failed'); }
-  };
-
-  const createSprint = async (e) => {
-    e.preventDefault();
-    if (!canManageSprints) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/sprints`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-        body: JSON.stringify(newSprint)
-      });
-      if (res.ok) { setShowSprintModal(false); fetchData(); }
-    } catch (err) { setError('Sprint creation failed'); }
-  };
-
-  const deleteSprint = async (id) => {
-    if (!canDeleteSprints) return;
-    try {
-      await fetch(`${API_BASE_URL}/sprints/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-auth-token': token }
-      });
-      fetchData();
-    } catch (err) { setError('Sprint delete failed'); }
-  };
-
-  const calculateSprintProgress = (sprintId) => {
-    const sprintTasks = tasks.filter(t => t.sprintId?._id === sprintId || t.sprintId === sprintId);
-    if (sprintTasks.length === 0) return 0;
-    const completed = sprintTasks.filter(t => t.status === 'Done').reduce((acc, t) => acc + t.storyPoints, 0);
-    const total = sprintTasks.reduce((acc, t) => acc + t.storyPoints, 0);
-    return Math.round((completed / total) * 100);
-  };
-
   if (!token) {
-    return (
-      <Auth 
-        isRegistering={isRegistering} 
-        setIsRegistering={setIsRegistering} 
-        authForm={authForm} 
-        setAuthForm={setAuthForm} 
-        handleLogin={handleLogin} 
-        handleRegister={handleRegister} 
-        error={error} 
-        setError={setError} 
-      />
-    );
+    return <Auth isRegistering={isRegistering} setIsRegistering={setIsRegistering} authForm={authForm} setAuthForm={setAuthForm} handleLogin={handleLogin} handleRegister={handleRegister} error={error} setError={setError} />;
   }
 
   return (
@@ -194,25 +225,19 @@ const App = () => {
             <h1 className="text-4xl font-black text-slate-800 tracking-tighter capitalize">
               {view === 'dashboard' ? 'Overview' : view + ' Space'}
             </h1>
-            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">Welcome back, {user?.username.split(' ')[0]}</p>
+            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">Team: {user?.role}</p>
           </div>
           <div className="flex gap-4">
             {view === 'board' && (
                <div className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-2xl shadow-sm">
                  <Filter size={16} className="text-slate-400" />
-                 <select 
-                  value={selectedSprintId}
-                  onChange={(e) => setSelectedSprintId(e.target.value)}
-                  className="bg-transparent font-black text-[10px] uppercase tracking-widest text-slate-600 outline-none cursor-pointer"
-                 >
+                 <select value={selectedSprintId} onChange={(e) => setSelectedSprintId(e.target.value)} className="bg-transparent font-black text-[10px] uppercase tracking-widest text-slate-600 outline-none cursor-pointer">
                    <option value="all">All Sprints</option>
-                   {sprints.map(s => (
-                     <option key={s._id} value={s._id}>{s.name}</option>
-                   ))}
+                   {sprints.map(s => (<option key={s._id} value={s._id}>{s.name} ({s.status || 'Planned'})</option>))}
                  </select>
                </div>
             )}
-            <button onClick={() => setShowTaskModal(true)} className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all active:scale-95">
+            <button onClick={() => { setEditingTask(null); setShowTaskModal(true); }} className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all active:scale-95">
               <Plus size={18} /> New Task
             </button>
             {canManageSprints && (
@@ -229,22 +254,42 @@ const App = () => {
           </div>
         ) : (
           <>
-            {view === 'dashboard' && <Dashboard tasks={tasks} sprints={sprints} availableUsers={availableUsers} calculateSprintProgress={calculateSprintProgress} canDeleteSprints={canDeleteSprints} deleteSprint={deleteSprint} />}
+            {view === 'dashboard' && (
+              <Dashboard 
+                tasks={tasks} 
+                sprints={sprints} 
+                availableUsers={availableUsers} 
+                calculateSprintProgress={calculateSprintProgress} 
+                canDeleteSprints={canDeleteSprints} 
+                deleteSprint={deleteSprint} 
+                updateSprintStatus={updateSprintStatus}
+              />
+            )}
             {view === 'board' && (
               <Board 
                 tasks={tasks} 
                 selectedSprintId={selectedSprintId}
-                updateTaskStatus={updateTaskStatus} 
                 moveTaskToStatus={moveTaskToStatus}
                 deleteTask={deleteTask} 
                 canDeleteTasks={canDeleteTasks} 
+                openEditModal={openEditModal}
               />
             )}
             {view === 'backlog' && <Backlog tasks={tasks} deleteTask={deleteTask} canDeleteTasks={canDeleteTasks} />}
           </>
         )}
 
-        {showTaskModal && <TaskModal setShowTaskModal={setShowTaskModal} newTask={newTask} setNewTask={setNewTask} availableUsers={availableUsers} sprints={sprints} createTask={createTask} />}
+        {showTaskModal && (
+          <TaskModal 
+            setShowTaskModal={setShowTaskModal} 
+            newTask={newTask} 
+            setNewTask={setNewTask} 
+            availableUsers={availableUsers} 
+            sprints={sprints} 
+            handleSave={handleSaveTask} 
+            isEditing={!!editingTask}
+          />
+        )}
         {showSprintModal && <SprintModal setShowSprintModal={setShowSprintModal} newSprint={newSprint} setNewSprint={setNewSprint} createSprint={createSprint} />}
       </main>
     </div>
