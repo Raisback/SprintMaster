@@ -24,7 +24,6 @@ const App = () => {
   const [showSprintModal, setShowSprintModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
 
-  // Permission Logic
   const canManageSprints = user?.role === 'ScrumMaster' || user?.role === 'ProductOwner';
   const canDeleteSprints = user?.role === 'ScrumMaster';
   const canDeleteTasks = user?.role === 'ScrumMaster' || user?.role === 'ProductOwner';
@@ -52,34 +51,14 @@ const App = () => {
       setSprints(Array.isArray(sprintsData) ? sprintsData : []);
       setAvailableUsers(Array.isArray(usersData) ? usersData : []);
 
-      // Auto-select active sprint if it exists and we haven't manually selected one
-      if (selectedSprintId === 'all') {
-        const active = sprintsData.find(s => s.status === 'active');
-        if (active) setSelectedSprintId(active._id);
-      }
-    } catch (err) { 
-      setError('Failed to load data'); 
-    } finally { 
-      setLoading(false); 
-    }
+      // Analytics: Auto-select active sprint for the Board
+      const active = sprintsData.find(s => s.status === 'active');
+      if (active && selectedSprintId === 'all') setSelectedSprintId(active._id);
+
+    } catch (err) { setError('Failed to load data'); } finally { setLoading(false); }
   }, [token, selectedSprintId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  // --- Task Operations ---
-  const openEditModal = (task) => {
-    setEditingTask(task);
-    setNewTask({
-      title: task.title,
-      description: task.description,
-      status: task.status,
-      priority: task.priority,
-      storyPoints: task.storyPoints,
-      assignee: task.assignee?._id || task.assignee || '',
-      sprintId: task.sprintId?._id || task.sprintId || ''
-    });
-    setShowTaskModal(true);
-  };
 
   const handleSaveTask = async (e) => {
     e.preventDefault();
@@ -95,10 +74,24 @@ const App = () => {
       if (res.ok) {
         setShowTaskModal(false);
         setEditingTask(null);
-        fetchData();
         setNewTask({ title: '', description: '', status: 'To Do', priority: 'Medium', storyPoints: 1, assignee: '', sprintId: '' });
+        fetchData();
       }
     } catch (err) { setError('Failed to save task'); }
+  };
+
+  const openEditModal = (task) => {
+    setEditingTask(task);
+    setNewTask({
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      storyPoints: task.storyPoints,
+      assignee: task.assignee?._id || task.assignee || '',
+      sprintId: task.sprintId?._id || task.sprintId || ''
+    });
+    setShowTaskModal(true);
   };
 
   const moveTaskToStatus = async (taskId, newStatus) => {
@@ -110,6 +103,17 @@ const App = () => {
       });
       fetchData();
     } catch (err) { setError('Update failed'); }
+  };
+
+  const updateSprintStatus = async (sprintId, status) => {
+    try {
+      await fetch(`${API_BASE_URL}/sprints/${sprintId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+        body: JSON.stringify({ status })
+      });
+      fetchData();
+    } catch (err) { setError('Failed to update sprint status'); }
   };
 
   const deleteTask = async (taskId) => {
@@ -124,7 +128,6 @@ const App = () => {
     } catch (err) { setError('Delete failed'); }
   };
 
-  // --- Sprint Operations ---
   const createSprint = async (e) => {
     e.preventDefault();
     if (!canManageSprints) return;
@@ -142,20 +145,9 @@ const App = () => {
     } catch (err) { setError('Sprint creation failed'); }
   };
 
-  const updateSprintStatus = async (sprintId, status) => {
-    try {
-      await fetch(`${API_BASE_URL}/sprints/${sprintId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-        body: JSON.stringify({ status })
-      });
-      fetchData();
-    } catch (err) { setError('Failed to update cycle'); }
-  };
-
   const deleteSprint = async (id) => {
     if (!canDeleteSprints) return;
-    if (!window.confirm('Are you sure? This will remove the sprint but keep tasks in backlog.')) return;
+    if (!window.confirm('Delete this sprint? Tasks will return to backlog.')) return;
     try {
       await fetch(`${API_BASE_URL}/sprints/${id}`, {
         method: 'DELETE',
@@ -173,7 +165,6 @@ const App = () => {
     return Math.round((completed / total) * 100);
   };
 
-  // Auth Handlers
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -225,7 +216,7 @@ const App = () => {
             <h1 className="text-4xl font-black text-slate-800 tracking-tighter capitalize">
               {view === 'dashboard' ? 'Overview' : view + ' Space'}
             </h1>
-            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">Team: {user?.role}</p>
+            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">Team Role: {user?.role}</p>
           </div>
           <div className="flex gap-4">
             {view === 'board' && (
@@ -275,7 +266,7 @@ const App = () => {
                 openEditModal={openEditModal}
               />
             )}
-            {view === 'backlog' && <Backlog tasks={tasks} deleteTask={deleteTask} canDeleteTasks={canDeleteTasks} />}
+            {view === 'backlog' && <Backlog tasks={tasks} deleteTask={deleteTask} canDeleteTasks={canDeleteTasks} openEditModal={openEditModal} />}
           </>
         )}
 
