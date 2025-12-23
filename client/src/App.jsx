@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Calendar, Loader2 } from 'lucide-react';
+import { Plus, Calendar, Loader2, Filter } from 'lucide-react';
 import Sidebar from './Sidebar';
 import Dashboard from './Dashboard';
 import Board from './Board';
@@ -15,6 +15,7 @@ const App = () => {
   const [view, setView] = useState('dashboard');
   const [tasks, setTasks] = useState([]);
   const [sprints, setSprints] = useState([]);
+  const [selectedSprintId, setSelectedSprintId] = useState('all'); // Track active filter
   const [availableUsers, setAvailableUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -105,7 +106,6 @@ const App = () => {
     } catch (err) { setError('Failed to create task'); }
   };
 
-  // Original function for clicking through statuses
   const updateTaskStatus = async (taskId, currentStatus, direction = 1) => {
     const statuses = ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'];
     let currentIndex = statuses.indexOf(currentStatus);
@@ -115,7 +115,6 @@ const App = () => {
     }
   };
 
-  // New specific move function used by both drag-and-drop and the original click-through
   const moveTaskToStatus = async (taskId, newStatus) => {
     try {
       await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
@@ -198,6 +197,21 @@ const App = () => {
             <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">Welcome back, {user?.username.split(' ')[0]}</p>
           </div>
           <div className="flex gap-4">
+            {view === 'board' && (
+               <div className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-2xl shadow-sm">
+                 <Filter size={16} className="text-slate-400" />
+                 <select 
+                  value={selectedSprintId}
+                  onChange={(e) => setSelectedSprintId(e.target.value)}
+                  className="bg-transparent font-black text-[10px] uppercase tracking-widest text-slate-600 outline-none cursor-pointer"
+                 >
+                   <option value="all">All Sprints</option>
+                   {sprints.map(s => (
+                     <option key={s._id} value={s._id}>{s.name}</option>
+                   ))}
+                 </select>
+               </div>
+            )}
             <button onClick={() => setShowTaskModal(true)} className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all active:scale-95">
               <Plus size={18} /> New Task
             </button>
@@ -219,6 +233,7 @@ const App = () => {
             {view === 'board' && (
               <Board 
                 tasks={tasks} 
+                selectedSprintId={selectedSprintId}
                 updateTaskStatus={updateTaskStatus} 
                 moveTaskToStatus={moveTaskToStatus}
                 deleteTask={deleteTask} 

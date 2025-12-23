@@ -1,15 +1,22 @@
 import React from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Info } from 'lucide-react';
 
-const Board = ({ tasks, updateTaskStatus, moveTaskToStatus, deleteTask, canDeleteTasks }) => {
+const Board = ({ tasks, selectedSprintId, updateTaskStatus, moveTaskToStatus, deleteTask, canDeleteTasks }) => {
   const statuses = ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'];
+
+  // Filter tasks based on selected sprint
+  const filteredTasks = tasks.filter(task => {
+    if (selectedSprintId === 'all') return true;
+    const taskSprintId = task.sprintId?._id || task.sprintId;
+    return taskSprintId === selectedSprintId;
+  });
 
   const onDragStart = (e, taskId) => {
     e.dataTransfer.setData("taskId", taskId);
   };
 
   const onDragOver = (e) => {
-    e.preventDefault(); // Necessary to allow a drop
+    e.preventDefault();
   };
 
   const onDrop = (e, targetStatus) => {
@@ -37,12 +44,12 @@ const Board = ({ tasks, updateTaskStatus, moveTaskToStatus, deleteTask, canDelet
               {status}
             </h3>
             <span className="bg-white border border-slate-100 text-slate-400 font-black text-[9px] px-2 py-1 rounded-lg">
-              {tasks.filter(t => t.status === status).length}
+              {filteredTasks.filter(t => t.status === status).length}
             </span>
           </div>
           
           <div className="space-y-4 min-h-[500px]">
-            {tasks.filter(t => t.status === status).map(task => (
+            {filteredTasks.filter(t => t.status === status).map(task => (
               <div 
                 key={task._id}
                 draggable
@@ -68,7 +75,7 @@ const Board = ({ tasks, updateTaskStatus, moveTaskToStatus, deleteTask, canDelet
                   </span>
                   {task.sprintId && (
                     <span className="text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-indigo-50 text-indigo-600">
-                      {task.sprintId.name}
+                      {task.sprintId.name || 'Cycle'}
                     </span>
                   )}
                 </div>
@@ -77,7 +84,7 @@ const Board = ({ tasks, updateTaskStatus, moveTaskToStatus, deleteTask, canDelet
                 <div className="flex items-center justify-between pt-4 border-t border-slate-50">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 bg-slate-100 rounded-lg flex items-center justify-center font-black text-[8px] text-slate-500">
-                      {task.assignee?.username.substring(0, 1).toUpperCase() || '?'}
+                      {task.assignee?.username?.substring(0, 1).toUpperCase() || '?'}
                     </div>
                     <span className="text-[9px] font-black text-slate-400 uppercase">{task.assignee?.username || 'Unassigned'}</span>
                   </div>
@@ -87,6 +94,12 @@ const Board = ({ tasks, updateTaskStatus, moveTaskToStatus, deleteTask, canDelet
                 </div>
               </div>
             ))}
+
+            {filteredTasks.filter(t => t.status === status).length === 0 && (
+              <div className="h-24 border-2 border-dashed border-slate-100 rounded-3xl flex items-center justify-center">
+                 <p className="text-[9px] font-black text-slate-200 uppercase tracking-widest">Empty</p>
+              </div>
+            )}
           </div>
         </div>
       ))}
