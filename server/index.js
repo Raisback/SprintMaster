@@ -1,7 +1,7 @@
 /**
  * SprintMaster | Agile & Scrum Project Management Suite
  * FULL VERSION: Consolidated Auth, Tasks (with Delete), and Sprints
- * UPDATE: Added subtasks to Schema and PUT route for DoD support
+ * UPDATE: Added subtasks to Schema, PATCH route for drag-and-drop, and PUT for DoD
  */
 
 const express = require('express');
@@ -51,7 +51,6 @@ const taskSchema = new mongoose.Schema({
   storyPoints: { type: Number, default: 1 },
   assignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   sprintId: { type: mongoose.Schema.Types.ObjectId, ref: 'Sprint' },
-  // FIX: Added subtasks array to store Definition of Done steps
   subtasks: [{
     text: String,
     completed: { type: Boolean, default: false }
@@ -92,6 +91,7 @@ const checkRole = (roles) => {
 
 // --- 3. ROUTES ---
 
+// Auth Routes
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, email, password, role } = req.body;
@@ -126,6 +126,7 @@ app.get('/api/users', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Task Routes
 app.get('/api/tasks', authMiddleware, async (req, res) => {
   try {
     const tasks = await Task.find().populate('assignee', 'username').populate('sprintId', 'name');
@@ -145,7 +146,24 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// FIX: Changed from .patch to .put to align with frontend App.jsx handleSaveTask
+// PARTIAL UPDATE (PATCH): Optimized for Drag and Drop status changes
+app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const task = await Task.findByIdAndUpdate(
+      req.params.id, 
+      { $set: { status: status } }, 
+      { new: true }
+    ).populate('assignee', 'username').populate('sprintId', 'name');
+    
+    if (!task) return res.status(404).json({ msg: 'Task not found' });
+    res.json(task);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// FULL UPDATE (PUT): Aligned with frontend handleSaveTask for deep edits
 app.put('/api/tasks/:id', authMiddleware, async (req, res) => {
   try {
     const updateData = req.body;
@@ -166,26 +184,6 @@ app.put('/api/tasks/:id', authMiddleware, async (req, res) => {
   }
 });
 
-
-app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
-  try {
-    const { status } = req.body;
-    
-    // Find the task and update only the status
-    const task = await Task.findByIdAndUpdate(
-      req.params.id,
-      { $set: { status: status } },
-      { new: true }
-    ).populate('assignee', 'username').populate('sprintId', 'name');
-
-    if (!task) return res.status(404).json({ msg: 'Task not found' });
-    
-    res.json(task);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.delete('/api/tasks/:id', authMiddleware, checkRole(['ScrumMaster', 'ProductOwner']), async (req, res) => {
   try {
     const task = await Task.findByIdAndDelete(req.params.id);
@@ -196,6 +194,7 @@ app.delete('/api/tasks/:id', authMiddleware, checkRole(['ScrumMaster', 'ProductO
   }
 });
 
+// Sprint Routes
 app.post('/api/sprints', authMiddleware, checkRole(['ScrumMaster', 'ProductOwner']), async (req, res) => {
   try {
     const { name, goal, startDate, endDate } = req.body;
@@ -236,7 +235,7 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/sprintmast
 
 mongoose.connect(MONGO_URI)
   .then(() => {
-    console.log('MongoDB Connected with subtask support');
+    console.log('MongoDB Connected with subtask and PATCH support');
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
   .catch(err => console.log(err));
