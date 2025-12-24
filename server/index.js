@@ -166,6 +166,26 @@ app.put('/api/tasks/:id', authMiddleware, async (req, res) => {
   }
 });
 
+
+app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
+  try {
+    const { status } = req.body;
+    
+    // Find the task and update only the status
+    const task = await Task.findByIdAndUpdate(
+      req.params.id,
+      { $set: { status: status } },
+      { new: true }
+    ).populate('assignee', 'username').populate('sprintId', 'name');
+
+    if (!task) return res.status(404).json({ msg: 'Task not found' });
+    
+    res.json(task);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/tasks/:id', authMiddleware, checkRole(['ScrumMaster', 'ProductOwner']), async (req, res) => {
   try {
     const task = await Task.findByIdAndDelete(req.params.id);

@@ -91,21 +91,34 @@ const App = () => {
       storyPoints: task.storyPoints,
       assignee: task.assignee?._id || task.assignee || '',
       sprintId: task.sprintId?._id || task.sprintId || '',
-      // Ensure subtasks are cloned to break reference and trigger re-renders in Modal
       subtasks: task.subtasks ? [...task.subtasks] : [] 
     });
     setShowTaskModal(true);
   };
 
+  // REVISED: moveTaskToStatus
   const moveTaskToStatus = async (taskId, newStatus) => {
+    // Optimistic Update: Update UI immediately so it feels snappy
+    const originalTasks = [...tasks];
+    setTasks(prev => prev.map(t => t._id === taskId ? { ...t, status: newStatus } : t));
+
     try {
-      await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+      const res = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
         body: JSON.stringify({ status: newStatus })
       });
+      
+      if (!res.ok) {
+        throw new Error('Server rejected update');
+      }
+      // Refresh to ensure we have latest server state
       fetchData();
-    } catch (err) { setError('Update failed'); }
+    } catch (err) { 
+      console.error("Drop failed:", err);
+      setError('Update failed - Reverting');
+      setTasks(originalTasks); // Revert if server fails
+    }
   };
 
   const updateSprintStatus = async (sprintId, status) => {
@@ -268,7 +281,7 @@ const App = () => {
                 tasks={tasks} 
                 deleteTask={deleteTask} 
                 canDeleteTasks={canDeleteTasks} 
-                openEditModal={openEditModal} // Added this prop to enable editing from backlog
+                openEditModal={openEditModal}
               />
             )}
           </>
