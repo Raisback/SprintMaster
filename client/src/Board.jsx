@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Trash2, CheckSquare } from 'lucide-react';
 
 const Board = ({ tasks, selectedSprintId, moveTaskToStatus, deleteTask, canDeleteTasks, openEditModal }) => {
+  const [activeColumn, setActiveColumn] = useState(null);
   const statuses = ['Backlog', 'To Do', 'In Progress', 'Review', 'Done'];
 
   const filteredTasks = tasks.filter(task => {
@@ -10,15 +11,27 @@ const Board = ({ tasks, selectedSprintId, moveTaskToStatus, deleteTask, canDelet
     return taskSprintId === selectedSprintId;
   });
 
-  const handleDragOver = (e) => {
+  // Track drag enter/leave with a counter to handle child elements
+  const [dragCounter, setDragCounter] = useState({});
+
+  const handleDragEnter = (e, status) => {
     e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = "move";
+    setDragCounter(prev => ({ ...prev, [status]: (prev[status] || 0) + 1 }));
+    setActiveColumn(status);
+  };
+
+  const handleDragLeave = (e, status) => {
+    const newCount = (dragCounter[status] || 0) - 1;
+    setDragCounter(prev => ({ ...prev, [status]: newCount }));
+    if (newCount <= 0) {
+      setActiveColumn(null);
+    }
   };
 
   const handleDrop = (e, status) => {
     e.preventDefault();
-    e.stopPropagation();
+    setActiveColumn(null);
+    setDragCounter({});
     const taskId = e.dataTransfer.getData("taskId");
     if (taskId) {
       moveTaskToStatus(taskId, status);
@@ -30,20 +43,22 @@ const Board = ({ tasks, selectedSprintId, moveTaskToStatus, deleteTask, canDelet
       {statuses.map(status => (
         <div 
           key={status} 
-          className="flex flex-col gap-6"
-          onDragOver={handleDragOver}
-          onDragEnter={(e) => e.preventDefault()}
+          className={`space-y-6 transition-all duration-200 rounded-3xl p-2 min-h-[600px] ${
+            activeColumn === status ? 'bg-indigo-50/50 ring-2 ring-indigo-200 ring-dashed' : ''
+          }`} 
+          onDragOver={(e) => e.preventDefault()} 
+          onDragEnter={(e) => handleDragEnter(e, status)}
+          onDragLeave={(e) => handleDragLeave(e, status)}
           onDrop={(e) => handleDrop(e, status)}
         >
-          <div className="px-2">
+          <div className="px-2 pointer-events-none">
             <h3 className="font-black text-xs uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${status === 'Done' ? 'bg-emerald-400' : 'bg-indigo-400'}`}></span>
               {status}
             </h3>
           </div>
           
-          {/* This wrapper ensures there is a large, valid area to catch the drop */}
-          <div className="space-y-4 min-h-[70vh] pb-20">
+          <div className="space-y-4 pointer-events-none">
             {filteredTasks.filter(t => t.status === status).map(task => {
               const completedSubtasks = task.subtasks?.filter(s => s.completed).length || 0;
               const totalSubtasks = task.subtasks?.length || 0;
@@ -52,19 +67,20 @@ const Board = ({ tasks, selectedSprintId, moveTaskToStatus, deleteTask, canDelet
                 <div 
                   key={task._id} 
                   draggable 
+                  // Re-enable pointer events for the draggable item itself
+                  className="pointer-events-auto group bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer relative"
                   onDragStart={(e) => {
                     e.dataTransfer.setData("taskId", task._id);
-                    e.dataTransfer.effectAllowed = "move";
+                    e.currentTarget.style.opacity = '0.4';
+                  }}
+                  onDragEnd={(e) => {
+                    e.currentTarget.style.opacity = '1';
                   }}
                   onClick={() => openEditModal(task)}
-                  className="group bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer relative"
                 >
                   {canDeleteTasks && (
                     <button 
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        deleteTask(task._id); 
-                      }} 
+                      onClick={(e) => { e.stopPropagation(); deleteTask(task._id); }} 
                       className="absolute top-4 right-4 p-2 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"
                     >
                       <Trash2 size={14} />
