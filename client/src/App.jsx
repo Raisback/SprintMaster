@@ -5,6 +5,7 @@ import Dashboard from './Dashboard';
 import Board from './Board';
 import Backlog from './Backlog';
 import Auth from './Auth';
+import Profile from './Profile';
 import { TaskModal, SprintModal } from './Modals';
 
 const API_BASE_URL = 'http://localhost:5000/api';
@@ -96,9 +97,7 @@ const App = () => {
     setShowTaskModal(true);
   };
 
-  // REVISED: moveTaskToStatus
   const moveTaskToStatus = async (taskId, newStatus) => {
-    // Optimistic Update: Update UI immediately so it feels snappy
     const originalTasks = [...tasks];
     setTasks(prev => prev.map(t => t._id === taskId ? { ...t, status: newStatus } : t));
 
@@ -108,16 +107,11 @@ const App = () => {
         headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
         body: JSON.stringify({ status: newStatus })
       });
-      
-      if (!res.ok) {
-        throw new Error('Server rejected update');
-      }
-      // Refresh to ensure we have latest server state
+      if (!res.ok) throw new Error('Server rejected update');
       fetchData();
     } catch (err) { 
-      console.error("Drop failed:", err);
       setError('Update failed - Reverting');
-      setTasks(originalTasks); // Revert if server fails
+      setTasks(originalTasks);
     }
   };
 
@@ -234,25 +228,29 @@ const App = () => {
             </h1>
             <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">Agile Workspace</p>
           </div>
-          <div className="flex gap-4">
-            {view === 'board' && (
-               <div className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-2xl shadow-sm">
-                 <Filter size={16} className="text-slate-400" />
-                 <select value={selectedSprintId} onChange={(e) => setSelectedSprintId(e.target.value)} className="bg-transparent font-black text-[10px] uppercase tracking-widest text-slate-600 outline-none cursor-pointer">
-                   <option value="all">All Sprints</option>
-                   {sprints.map(s => (<option key={s._id} value={s._id}>{s.name}</option>))}
-                 </select>
-               </div>
-            )}
-            <button onClick={() => { setEditingTask(null); setShowTaskModal(true); }} className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all active:scale-95">
-              <Plus size={18} /> New Task
-            </button>
-            {canManageSprints && (
-              <button onClick={() => setShowSprintModal(true)} className="flex items-center gap-3 bg-white border-2 border-slate-800 hover:bg-slate-800 hover:text-white text-slate-800 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95">
-                <Calendar size={18} /> Init Sprint
+          
+          {/* Action Buttons: HIDDEN when viewing Profile */}
+          {view !== 'profile' && (
+            <div className="flex gap-4 animate-in fade-in duration-500">
+              {view === 'board' && (
+                <div className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-2xl shadow-sm">
+                  <Filter size={16} className="text-slate-400" />
+                  <select value={selectedSprintId} onChange={(e) => setSelectedSprintId(e.target.value)} className="bg-transparent font-black text-[10px] uppercase tracking-widest text-slate-600 outline-none cursor-pointer">
+                    <option value="all">All Sprints</option>
+                    {sprints.map(s => (<option key={s._id} value={s._id}>{s.name}</option>))}
+                  </select>
+                </div>
+              )}
+              <button onClick={() => { setEditingTask(null); setShowTaskModal(true); }} className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all active:scale-95">
+                <Plus size={18} /> New Task
               </button>
-            )}
-          </div>
+              {canManageSprints && (
+                <button onClick={() => setShowSprintModal(true)} className="flex items-center gap-3 bg-white border-2 border-slate-800 hover:bg-slate-800 hover:text-white text-slate-800 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95">
+                  <Calendar size={18} /> Init Sprint
+                </button>
+              )}
+            </div>
+          )}
         </header>
 
         {loading ? (
@@ -260,7 +258,7 @@ const App = () => {
             <Loader2 className="animate-spin text-indigo-600" size={48} />
           </div>
         ) : (
-          <>
+          <div className="animate-in fade-in zoom-in-95 duration-500">
             {view === 'dashboard' && (
               <Dashboard 
                 tasks={tasks} sprints={sprints} availableUsers={availableUsers} 
@@ -278,13 +276,14 @@ const App = () => {
             )}
             {view === 'backlog' && (
               <Backlog 
-                tasks={tasks} 
-                deleteTask={deleteTask} 
-                canDeleteTasks={canDeleteTasks} 
-                openEditModal={openEditModal}
+                tasks={tasks} deleteTask={deleteTask} 
+                canDeleteTasks={canDeleteTasks} openEditModal={openEditModal}
               />
             )}
-          </>
+            {view === 'profile' && (
+              <Profile user={user} token={token} setUser={setUser} />
+            )}
+          </div>
         )}
 
         {showTaskModal && (

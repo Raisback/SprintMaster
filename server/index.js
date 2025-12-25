@@ -1,9 +1,3 @@
-/**
- * SprintMaster | Agile & Scrum Project Management Suite
- * FULL VERSION: Consolidated Auth, Tasks (with Delete), and Sprints
- * UPDATE: Added subtasks to Schema, PATCH route for drag-and-drop, and PUT for DoD
- */
-
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -13,11 +7,8 @@ require('dotenv').config();
 
 const app = express();
 
-// Middleware
 app.use(cors());
 app.use(express.json()); 
-
-// --- 1. MONGOOSE MODELS ---
 
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
@@ -61,7 +52,6 @@ const User = mongoose.model('User', userSchema);
 const Sprint = mongoose.model('Sprint', sprintSchema);
 const Task = mongoose.model('Task', taskSchema);
 
-// --- 2. AUTH & RBAC MIDDLEWARE ---
 const authMiddleware = async (req, res, next) => {
   const token = req.header('x-auth-token');
   if (!token) return res.status(401).json({ msg: 'No token, authorization denied' });
@@ -89,9 +79,6 @@ const checkRole = (roles) => {
   };
 };
 
-// --- 3. ROUTES ---
-
-// Auth Routes
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, email, password, role } = req.body;
@@ -115,7 +102,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!user || !bcrypt.compareSync(password, user.password)) 
       return res.status(400).json({ msg: 'Invalid credentials' });
     const token = jwt.sign({ user: { id: user.id } }, process.env.JWT_SECRET || 'secret', { expiresIn: '10h' });
-    res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+    res.json({ token, user: { id: user.id, username: user.username, role: user.role, email: user.email } });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -126,7 +113,28 @@ app.get('/api/users', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Task Routes
+
+app.put('/api/users/:id', authMiddleware, async (req, res) => {
+  try {
+    const { username, email } = req.body;
+    // Basic validation
+    if (!username || !email) {
+      return res.status(400).json({ msg: 'All fields are required' });
+    }
+    
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: { username, email } },
+      { new: true }
+    ).select('-password');
+    
+    if (!user) return res.status(404).json({ msg: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/tasks', authMiddleware, async (req, res) => {
   try {
     const tasks = await Task.find().populate('assignee', 'username').populate('sprintId', 'name');
@@ -146,7 +154,6 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PARTIAL UPDATE (PATCH): Optimized for Drag and Drop status changes
 app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
   try {
     const { status } = req.body;
@@ -163,7 +170,6 @@ app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// FULL UPDATE (PUT): Aligned with frontend handleSaveTask for deep edits
 app.put('/api/tasks/:id', authMiddleware, async (req, res) => {
   try {
     const updateData = req.body;
@@ -184,6 +190,8 @@ app.put('/api/tasks/:id', authMiddleware, async (req, res) => {
   }
 });
 
+
+
 app.delete('/api/tasks/:id', authMiddleware, checkRole(['ScrumMaster', 'ProductOwner']), async (req, res) => {
   try {
     const task = await Task.findByIdAndDelete(req.params.id);
@@ -194,7 +202,6 @@ app.delete('/api/tasks/:id', authMiddleware, checkRole(['ScrumMaster', 'ProductO
   }
 });
 
-// Sprint Routes
 app.post('/api/sprints', authMiddleware, checkRole(['ScrumMaster', 'ProductOwner']), async (req, res) => {
   try {
     const { name, goal, startDate, endDate } = req.body;
@@ -229,7 +236,6 @@ app.delete('/api/sprints/:id', authMiddleware, checkRole(['ScrumMaster']), async
   }
 });
 
-// --- 4. DATABASE CONNECTION ---
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/sprintmaster';
 
