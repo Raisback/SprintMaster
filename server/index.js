@@ -159,7 +159,7 @@ app.get('/api/users', authMiddleware, async (req, res) => {
   }
 });
 
-// UPDATED: User PUT route to handle multipart/form-data for profile photos
+//  User PUT route to handle multipart/form-data for profile photos
 app.put('/api/users/:id', authMiddleware, upload.single('profileImage'), async (req, res) => {
   try {
     const { username, email, removeImage } = req.body;
@@ -168,32 +168,31 @@ app.put('/api/users/:id', authMiddleware, upload.single('profileImage'), async (
     const currentUser = await User.findById(req.params.id);
     if (!currentUser) return res.status(404).json({ msg: 'User not found' });
 
-    // Handle Physical Deletion
-    // Trigger if a new file is uploaded OR if the user explicitly clicked 'Remove'
     if (req.file || removeImage === 'true') {
       if (currentUser.profileImage) {
-        // Construct the full path. .slice(1) removes the leading '/' from '/uploads/...'
-        const relativePath = currentUser.profileImage.startsWith('/') 
-          ? currentUser.profileImage.slice(1) 
-          : currentUser.profileImage;
-          
-        const absolutePath = path.join(__dirname, relativePath);
+        const absolutePath = path.join(__dirname, currentUser.profileImage);
 
-        // Physically delete the file from the disk
-        if (fs.existsSync(absolutePath)) {
-          fs.unlinkSync(absolutePath);
-          console.log(`Physically deleted: ${absolutePath}`);
+        try {
+          if (fs.existsSync(absolutePath)) {
+            fs.unlinkSync(absolutePath);
+            console.log(`Successfully unlinked: ${absolutePath}`);
+          }
+        } catch (fileErr) {
+          console.error("File deletion error:", fileErr);
         }
       }
       
-      // Update DB field
       updateData.profileImage = req.file ? `/uploads/profiles/${req.file.filename}` : "";
     }
 
-    const user = await User.findByIdAndUpdate(req.params.id, { $set: updateData }, { new: true }).select('-password');
+    const user = await User.findByIdAndUpdate(
+      req.params.id, 
+      { $set: updateData }, 
+      { new: true }
+    ).select('-password');
+
     res.json(user);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
