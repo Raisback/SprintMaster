@@ -3,9 +3,9 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const multer = require('multer'); // Added for file uploads
-const path = require('path'); // Added for path handling
-const fs = require('fs'); // Added to ensure directory existence
+const multer = require('multer'); 
+const path = require('path'); 
+const fs = require('fs'); 
 require('dotenv').config();
 
 const app = express();
@@ -14,16 +14,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// NEW: Serve the uploads folder statically so the frontend can access images
 app.use('/uploads', express.static('uploads'));
 
-// Ensure the upload directory exists before the server starts
 const uploadDir = 'uploads/profiles';
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// NEW: Multer configuration for storing profile images
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/profiles/');
@@ -85,6 +82,12 @@ const taskSchema = new mongoose.Schema({
   subtasks: [{
     text: String,
     completed: { type: Boolean, default: false }
+  }],
+  // NEW: Comments field
+  comments: [{
+    text: { type: String, required: true },
+    author: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    createdAt: { type: Date, default: Date.now }
   }]
 }, { timestamps: true });
 
@@ -224,6 +227,34 @@ app.put('/api/tasks/:id', authMiddleware, async (req, res) => {
       .populate('assignee', 'username')
       .populate('sprintId', 'name');
     res.json(task);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// Add a comment to a task
+app.post('/api/tasks/:id/comments', authMiddleware, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ msg: 'Comment text is required' });
+
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ msg: 'Task not found' });
+
+    task.comments.push({
+      text,
+      author: req.user.id,
+      createdAt: new Date()
+    });
+    
+    await task.save();
+
+    // Populate so the frontend gets the username and image for the UI
+    const updatedTask = await Task.findById(task._id)
+      .populate('comments.author', 'username profileImage');
+
+    res.json(updatedTask.comments);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

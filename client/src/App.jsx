@@ -67,11 +67,13 @@ const App = () => {
     const method = editingTask ? 'PUT' : 'POST';
     const url = editingTask ? `${API_BASE_URL}/tasks/${editingTask._id}` : `${API_BASE_URL}/tasks`;
     
+    const { comments, ...taskDataToSave } = newTask;
+
     try {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-        body: JSON.stringify(newTask)
+        body: JSON.stringify(taskDataToSave) // Use the sanitized data
       });
       if (res.ok) {
         setShowTaskModal(false);
@@ -83,19 +85,21 @@ const App = () => {
   };
 
   const openEditModal = (task) => {
-    setEditingTask(task);
-    setNewTask({
-      title: task.title,
-      description: task.description,
-      status: task.status,
-      priority: task.priority,
-      storyPoints: task.storyPoints,
-      assignee: task.assignee?._id || task.assignee || '',
-      sprintId: task.sprintId?._id || task.sprintId || '',
-      subtasks: task.subtasks ? [...task.subtasks] : [] 
-    });
-    setShowTaskModal(true);
-  };
+  setEditingTask(task);
+  setNewTask({
+    _id: task._id,
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    priority: task.priority,
+    storyPoints: task.storyPoints,
+    assignee: task.assignee?._id || task.assignee || '',
+    sprintId: task.sprintId?._id || task.sprintId || '',
+    subtasks: task.subtasks ? [...task.subtasks] : [],
+    comments: task.comments ? [...task.comments] : [] 
+  });
+  setShowTaskModal(true);
+};
 
   const moveTaskToStatus = async (taskId, newStatus) => {
     const originalTasks = [...tasks];
