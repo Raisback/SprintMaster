@@ -285,7 +285,7 @@ const App = () => {
               />
             )}
             {view === 'profile' && (
-              <Profile user={user} token={token} setUser={setUser} />
+              <Profile user={user} token={token} setUser={setUser} handleLogout={handleLogout}/>
             )}
           </div>
         )}

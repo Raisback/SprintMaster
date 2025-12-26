@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { User, Mail, Save, Camera, AlertCircle, CheckCircle2, Loader2, Trash2 } from 'lucide-react';
+import { User, Mail, Save, Camera, AlertCircle, CheckCircle2, Loader2, Trash2, Shield, LogOut, AlertTriangle } from 'lucide-react';
 
-const Profile = ({ user, token, setUser }) => {
+const Profile = ({ user, token, setUser, handleLogout }) => {
   const [formData, setFormData] = useState({
     username: user?.username || '',
     email: user?.email || '',
@@ -33,6 +33,35 @@ const Profile = ({ user, token, setUser }) => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Logic to handle account deletion
+  const deleteAccount = async () => {
+    const confirmed = window.confirm(
+      "CRITICAL WARNING: Are you absolutely sure? This will permanently delete your account and remove your profile data. This action cannot be undone."
+    );
+    
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/users/${user.id || user._id}`, {
+        method: 'DELETE',
+        headers: { 
+          'x-auth-token': localStorage.getItem('token') 
+        }
+      });
+
+      if (res.ok) {
+        alert("Account successfully deleted.");
+        handleLogout(); // Clears local storage and redirects via App.jsx
+      } else {
+        const data = await res.json();
+        alert(data.msg || "Deletion failed.");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Server connection lost.");
+    }
+  };
+
   const handleUpdate = async (e) => {
     e.preventDefault();
     setStatus({ type: 'loading', msg: 'Syncing profile...' });
@@ -52,7 +81,6 @@ const Profile = ({ user, token, setUser }) => {
         method: 'PUT',
         headers: { 
           'x-auth-token': token 
-          // Browser sets Content-Type automatically for FormData
         },
         body: data
       });
@@ -65,7 +93,7 @@ const Profile = ({ user, token, setUser }) => {
         localStorage.setItem('user', JSON.stringify(updatedUser));
         
         setStatus({ type: 'success', msg: 'Identity updated successfully' });
-        setSelectedFile(null); // Reset file state after success
+        setSelectedFile(null); 
         setTimeout(() => setStatus({ type: '', msg: '' }), 3000);
       } else {
         setStatus({ type: 'error', msg: updatedUserFromDb.msg || 'Update failed' });
@@ -77,9 +105,18 @@ const Profile = ({ user, token, setUser }) => {
 
   return (
     <div className="max-w-5xl mx-auto py-12 px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col gap-1 mb-12">
-        <h1 className="text-5xl font-black text-slate-800 tracking-tighter uppercase">Profile Settings</h1>
-        <p className="text-slate-500 font-medium">Manage your identity and visual presence</p>
+      <div className="flex justify-between items-end mb-12">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-5xl font-black text-slate-800 tracking-tighter uppercase">Profile Settings</h1>
+          <p className="text-slate-500 font-medium">Manage your identity and visual presence</p>
+        </div>
+        <button 
+          onClick={handleLogout}
+          className="flex items-center gap-2 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
+        >
+          <LogOut size={14} />
+          Sign Out
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -87,10 +124,7 @@ const Profile = ({ user, token, setUser }) => {
         <div className="lg:col-span-1">
           <div className="bg-white rounded-[3rem] p-10 shadow-2xl shadow-slate-200 border border-slate-100 text-center sticky top-8">
             <div className="relative w-44 h-44 mx-auto mb-8 group cursor-pointer">
-              
-              {/* Main Container */}
               <div className="w-full h-full bg-slate-50 rounded-[2.8rem] overflow-hidden border-4 border-white shadow-xl relative transition-all duration-500 group-hover:shadow-indigo-100">
-                
                 {previewUrl ? (
                   <img src={previewUrl} alt="Profile" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
                 ) : (
@@ -103,7 +137,6 @@ const Profile = ({ user, token, setUser }) => {
                   </div>
                 )}
                 
-                {/* PREMIUM GHOST OVERLAY (Only shows if image exists) */}
                 {previewUrl && (
                   <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[4px] opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-4">
                     <button 
@@ -114,7 +147,6 @@ const Profile = ({ user, token, setUser }) => {
                       <Camera size={14} />
                       <span className="text-[10px] font-bold uppercase tracking-wider">Change</span>
                     </button>
-                    
                     <button 
                       type="button"
                       onClick={handleRemovePhoto}
@@ -126,23 +158,15 @@ const Profile = ({ user, token, setUser }) => {
                   </div>
                 )}
               </div>
-
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileChange} 
-                className="hidden" 
-                accept="image/*" 
-              />
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
             </div>
-
             <h3 className="text-xl font-black text-slate-800 truncate">{formData.username}</h3>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-2">{user?.role}</p>
           </div>
         </div>
 
         {/* Form Card */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-8">
           <div className="bg-white rounded-[3rem] p-12 shadow-2xl shadow-slate-200 border border-slate-100">
             {status.msg && (
               <div className={`mb-8 p-5 rounded-2xl flex items-center gap-3 font-bold text-sm animate-in zoom-in duration-300 ${
@@ -186,17 +210,40 @@ const Profile = ({ user, token, setUser }) => {
                 </div>
               </div>
 
-              <div className="pt-4">
-                <button 
-                  type="submit"
-                  disabled={status.type === 'loading'}
-                  className="w-full flex items-center justify-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.25em] transition-all active:scale-[0.97] shadow-2xl shadow-indigo-200 disabled:opacity-50"
+              <button 
+                type="submit"
+                disabled={status.type === 'loading'}
+                className="w-full flex items-center justify-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.25em] transition-all active:scale-[0.97] shadow-2xl shadow-indigo-200 disabled:opacity-50"
+              >
+                <Save size={18} />
+                {status.type === 'loading' ? 'Syncing Identity...' : 'Save Changes'}
+              </button>
+            </form>
+
+            {/* Danger Zone Section */}
+            <div className="mt-16 pt-10 border-t border-slate-100">
+              <h3 className="text-xs font-black text-red-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                <AlertTriangle size={14} />
+                Danger Zone
+              </h3>
+              
+              <div className="bg-red-50/50 border border-red-100 rounded-[2rem] p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="text-center md:text-left">
+                  <p className="text-sm font-black text-red-900 mb-1">Delete Account</p>
+                  <p className="text-xs text-red-600 font-bold leading-relaxed">
+                    Once you delete your account, there is no going back.<br/>All your personal data will be wiped from the system.
+                  </p>
+                </div>
+                
+                <button
+                  onClick={deleteAccount}
+                  className="whitespace-nowrap px-8 py-4 bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-red-200 active:scale-95 flex items-center gap-2"
                 >
-                  <Save size={18} />
-                  {status.type === 'loading' ? 'Processing...' : 'Save Changes'}
+                  <Trash2 size={14} />
+                  Delete My Account
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       </div>

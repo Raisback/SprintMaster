@@ -210,6 +210,30 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
   }
 });
 
+// Delete a user account
+app.delete('/api/users/:id', authMiddleware, async (req, res) => {
+  try {
+    // Security: Only the owner or a ScrumMaster can delete
+    if (req.user.id !== req.params.id && req.user.role !== 'ScrumMaster') {
+      return res.status(403).json({ msg: 'Not authorized' });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ msg: 'User not found' });
+
+    // Clean up profile image from server
+    if (user.profileImage) {
+      const absolutePath = path.join(__dirname, user.profileImage);
+      if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+    }
+
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ msg: 'Account deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/tasks', authMiddleware, async (req, res) => {
   try {
     const newTask = new Task(req.body);
