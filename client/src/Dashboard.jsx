@@ -123,9 +123,18 @@ const Dashboard = ({ tasks, sprints, availableUsers, calculateSprintProgress, ca
             <div key={u._id} className="flex items-center justify-between p-3 bg-white/[0.03] hover:bg-white/[0.08] rounded-xl border border-white/[0.05] transition-all group cursor-default">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="w-9 h-9 bg-gradient-to-tr from-indigo-600 to-indigo-400 rounded-lg flex items-center justify-center font-black text-[10px] uppercase shadow-lg group-hover:rotate-6 transition-transform">
-                    {u.username.substring(0, 2)}
-                  </div>
+                  {u.profileImage ? (
+                      <img 
+                        src={`http://localhost:5000${u.profileImage}`} 
+                        alt={u.username}
+                        className="w-9 h-9 rounded-lg object-cover shadow-lg group-hover:rotate-6 transition-transform"
+                        onError={(e) => { e.target.src = 'https://ui-avatars.com/api/?name=' + u.username; }}
+                      />
+                    ) : (
+                      <div className="w-9 h-9 bg-gradient-to-tr from-indigo-600 to-indigo-400 rounded-lg flex items-center justify-center font-black text-[10px] uppercase shadow-lg group-hover:rotate-6 transition-transform">
+                        {u.username.substring(0, 2)}
+                      </div>
+                    )}
                   <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#0f172a] rounded-full"></div>
                 </div>
                 <div>
