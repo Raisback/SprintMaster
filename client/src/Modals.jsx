@@ -66,6 +66,29 @@ export const TaskModal = ({ setShowTaskModal, newTask, setNewTask, availableUser
     }
   };
 
+const deleteComment = async (commentId) => {
+    if (!window.confirm("Delete this comment?")) return;
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/tasks/${newTask._id}/comments/${commentId}`, {
+        method: 'DELETE',
+        headers: { 
+          'x-auth-token': localStorage.getItem('token') 
+        }
+      });
+
+      if (res.ok) {
+        const updatedComments = await res.json();
+        setNewTask({ ...newTask, comments: updatedComments });
+      } else {
+        const data = await res.json();
+        alert(data.msg || "Failed to delete comment");
+      }
+    } catch (err) {
+      console.error("Delete comment error:", err);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
       <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl p-12 relative border border-slate-100 max-h-[90vh] overflow-y-auto">
@@ -155,6 +178,12 @@ export const TaskModal = ({ setShowTaskModal, newTask, setNewTask, availableUser
                         <span className="text-[8px] text-slate-300 font-bold">
                           {c.createdAt ? new Date(c.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Just now'}
                         </span>
+                        <button 
+                          onClick={() => deleteComment(c._id)}
+                          className="text-slate-300 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 size={10} />
+                        </button>
                       </div>
                       <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl group-hover:bg-slate-100 transition-colors">
                         <p className="text-xs font-bold text-slate-600 leading-relaxed">{c.text}</p>

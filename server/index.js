@@ -260,6 +260,39 @@ app.post('/api/tasks/:id/comments', authMiddleware, async (req, res) => {
   }
 });
 
+
+// Delete a specific comment from a task
+app.delete('/api/tasks/:taskId/comments/:commentId', authMiddleware, async (req, res) => {
+  try {
+    const { taskId, commentId } = req.params;
+    console.log("Attempting to delete. Task:", taskId, "Comment:", commentId);
+
+    const task = await Task.findById(taskId);
+    if (!task) return res.status(404).json({ msg: 'Task not found' });
+
+    // Use .find() if .id() is failing to see if the ID exists in the array
+    const comment = task.comments.find(c => c._id.toString() === commentId);
+    
+    if (!comment) {
+      console.log("Current task comments:", task.comments.map(c => c._id));
+      return res.status(404).json({ msg: 'Comment not found' });
+    }
+
+    // Authorization check
+    if (comment.author.toString() !== req.user.id && req.user.role !== 'ScrumMaster') {
+      return res.status(403).json({ msg: 'Not authorized' });
+    }
+
+    task.comments.pull(commentId);
+    await task.save();
+
+    const updatedTask = await Task.findById(taskId).populate('comments.author', 'username profileImage');
+    res.json(updatedTask.comments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.patch('/api/tasks/:id', authMiddleware, async (req, res) => {
   try {
     const task = await Task.findByIdAndUpdate(req.params.id, { $set: req.body }, { new: true })
