@@ -1,25 +1,81 @@
-# Agile Workspace - Scrum Management System
+# Agile Workspace - Full-Stack Scrum Management
 
-A premium Project Management tool built for high-performance teams. This application streamlines the Scrum lifecycle from backlog grooming to sprint finalization.
+A premium Project Management application designed for high-performance teams to manage the Scrum lifecycle—from backlog grooming to sprint finalization.
 
 ## ✨ Core Features
 
-### 📊 Intelligence Dashboard
-- **Active Cycle Insight**: Live tracking of the current sprint with real-time velocity calculation based on story points.
-- **Strategic Roadmap**: Visual indicators for Planned, Active, and Completed cycles.
-- **Team Collaborators**: Sidebar displaying active team members with live status indicators.
+###  Intelligence Dashboard
+- **Active Cycle Insight**: Live tracking of current sprint progress with real-time velocity calculations based on story points.
+- **Strategic Roadmap**: Visual progress indicators for Planned, Active, and Completed cycles using a glassmorphism design.
+- **Team Collaborators**: Sidebar with user role indicators, profile presence, and dynamic avatar generation.
+- **Quick Stats**: At-a-glance metrics for Total Backlog, Burned Points, and Total Cycles.
 
-### 👤 Identity Management
-- **Visual Profiles**: Support for custom profile photo uploads and removal.
-- **Dynamic Avatars**: Automatic generation of letter-based avatars for users without photos.
-- **Security Control**: Role-based access and a "Danger Zone" for permanent account deletion.
+###  Identity & Security
+- **Visual Profiles**: Support for custom profile photo uploads with 2MB size validation and real-time previews.
+- **Identity Sync**: Dynamic updates for usernames and email addresses with immediate local storage synchronization.
+- **Role-Based UI**: Displays specific user permissions (e.g., ScrumMaster, Developer) throughout the interface.
+- **Danger Zone**: Secure account deletion logic that triggers a full session termination and local storage wipe.
 
-### 📝 Task & Sprint Lifecycle
-- **Sprint Management**: Ability to activate, finalize, or delete development cycles.
-- **Requirement Tracking**: Comprehensive stats for "Burned Points" and total backlog volume.
+---
 
-## 🛠️ Technical Implementation
-- **Frontend**: React.js with Tailwind CSS for high-end "Midnight Navy" aesthetics.
-- **Icons**: Lucide-react for consistent, clean iconography.
-- **Backend**: Node.js & Express with MongoDB/Mongoose.
-- **Authentication**: JWT-based secure sessions.
+##  Getting Started
+
+### Prerequisites
+- **Node.js**: v16.x or higher
+- **MongoDB**: Local Community Server instance or MongoDB Atlas URI
+- **Git**: For version control and backdating commits
+
+### Installation
+
+1. **Clone the Repository**
+   ```bash
+   git clone [https://github.com/your-username/agile-workspace.git](https://github.com/your-username/agile-workspace.git)
+   cd agile-workspace ```
+
+2. **Clone the Repository**
+   ```bash
+   npm install``` 
+
+
+3. **Frontend Setup Navigate to the client directory and install dependencies:**
+   ```bash
+    cd client
+    npm install```
+
+### Running the Application
+
+- You can run both the server and the client concurrently from the root directory:-
+
+ **Terminal 1 (Backend):**
+    bash
+
+        node server/index.js
+
+ **Terminal 2 (Frontend):**
+    bash
+
+        cd client
+        npm run dev
+
+- Backend API: http://localhost:5000
+
+- Frontend App: http://localhost:5173 (Vite default)
+
+##  Technical Stack
+
+- **Frontend:** React.js, Tailwind CSS, Lucide-React.
+
+- **Backend:** Node.js, Express.js.
+
+- **Database:** MongoDB with Mongoose ODM.
+
+- **Authentication:** JSON Web Tokens (JWT) and Bcrypt encryption.
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE). See the file for details.
+
+
+
+
+
