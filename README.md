@@ -1,4 +1,4 @@
-# Agile Workspace - Full-Stack Scrum Management
+# SprintMaster - Full-Stack Scrum Management
 
 A premium Project Management application designed for high-performance teams to manage the Scrum lifecycle—from backlog grooming to sprint finalization.
 
@@ -29,18 +29,18 @@ A premium Project Management application designed for high-performance teams to 
 
 1. **Clone the Repository**
    ```bash
-   git clone [https://github.com/your-username/agile-workspace.git](https://github.com/your-username/agile-workspace.git)
-   cd agile-workspace ```
+   git clone https://github.com/Raisback/SprintMaster.git
+   cd SprintMaster 
 
 2. **Clone the Repository**
    ```bash
-   npm install``` 
+   npm install 
 
 
 3. **Frontend Setup Navigate to the client directory and install dependencies:**
    ```bash
     cd client
-    npm install```
+    npm install
 
 ### Running the Application
 
