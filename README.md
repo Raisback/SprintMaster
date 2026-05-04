@@ -2,9 +2,8 @@
 
 A premium Project Management application designed for high-performance teams to manage the Scrum lifecycle—from backlog grooming to sprint finalization.
 
-## ✨ Core Features
+###  Core Features
 
-###  Intelligence Dashboard
 - **Active Cycle Insight**: Live tracking of current sprint progress with real-time velocity calculations based on story points.
 - **Strategic Roadmap**: Visual progress indicators for Planned, Active, and Completed cycles using a glassmorphism design.
 - **Team Collaborators**: Sidebar with user role indicators, profile presence, and dynamic avatar generation.
@@ -66,7 +65,7 @@ A premium Project Management application designed for high-performance teams to 
 
 - **Authentication:** JSON Web Tokens (JWT) and Bcrypt encryption.
 
-## 📄 License
+##  License
 
 This project is licensed under the [MIT License](LICENSE). See the file for details.
 
