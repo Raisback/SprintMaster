@@ -32,12 +32,7 @@ A premium Project Management application designed for high-performance teams to 
    git clone https://github.com/Raisback/SprintMaster.git
    cd SprintMaster 
 
-2. **Clone the Repository**
-   ```bash
-   npm install 
-
-
-3. **Frontend Setup Navigate to the client directory and install dependencies:**
+2. **Frontend Setup Navigate to the client directory and install dependencies:**
    ```bash
     cd client
     npm install
